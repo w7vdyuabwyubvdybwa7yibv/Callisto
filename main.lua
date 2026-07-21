@@ -1,12 +1,12 @@
 --!strict
 --[[
-	Callisto — full‑featured UI library
-	- Tabs (sidebar)
-	- Sub‑tabs (pages) displayed horizontally
-	- Left & Right sections per page
-	- Controls: Toggle, Slider, Keybind, Colorpicker, etc.
-	Styling matches the source library (dark, compact, pill toggles).
-	Slider behaviour unchanged.
+	Callisto — single-file UI library
+	Now using Aether.lua structure:
+	- Window:CreateWindow({ Title, SubText, Image, IsMobile })
+	- Window:AddTab({ Text, Icon })
+	- Tab:AddSection({ Title, Side })
+	- Section:AddToggle / AddSlider / AddDropdown / AddColorPicker / AddKeyPicker
+	- Library:Notify({ Title, Lifetime })
 ]]
 
 local Players = game:GetService("Players")
@@ -73,20 +73,27 @@ Callisto.Version = "1.0.0"
 Callisto.Flags = {} :: { [string]: any }
 Callisto.Windows = {} :: { any }
 Callisto.Connections = {} :: { RBXScriptConnection }
+Callisto.Notifications = {} :: { any }
 
 --=============================================================================
--- Theme (exact colours from source)
+-- Theme (Aether‑style dark theme)
 --=============================================================================
 
 local DefaultTheme = {
-	Background = RGB(12, 12, 14),      -- #0C0C0E
-	Foreground = RGB(20, 20, 22),      -- #141416 (ElementBackground)
-	ForegroundLight = RGB(23, 24, 27), -- #17181B (Inline)
-	Border = RGB(23, 24, 27),          -- #17181B
-	Accent = RGB(255, 182, 193),       -- #FFB6C1
+	Background = RGB(12, 12, 14),
+	Foreground = RGB(20, 20, 22),
+	ForegroundLight = RGB(23, 24, 27),
+	Border = RGB(23, 24, 27),
+	Accent = RGB(255, 182, 193),
 	AccentLight = RGB(255, 200, 210),
 	AccentDark = RGB(200, 130, 145),
 	Text = RGB(255, 255, 255),
+	Unselected = RGB(170, 170, 170),
+	TabButtons = RGB(20, 22, 26),
+	Inline = RGB(23, 24, 27),
+	ElementBackground = RGB(20, 20, 22),
+	SectionBackground = RGB(15, 16, 18),
+	ElementOutline = RGB(25, 25, 29),
 }
 
 Callisto.Theme = table.clone(DefaultTheme)
@@ -623,12 +630,12 @@ local function InsideBounds(mouse: Vector2, object: GuiObject): boolean
 end
 
 --=============================================================================
--- Sub-elements (redesigned toggle, checkbox, keybind)
+-- Sub-elements
 --=============================================================================
 
 local SubElement = {}
 
--- Redesigned Toggle (34x16, pill, circle, accent on)
+-- Toggle (34x16 pill)
 function SubElement.Toggle(parent: Instance, default: boolean, callback: (boolean) -> ())
 	local state = default and true or false
 
@@ -709,7 +716,7 @@ function SubElement.Toggle(parent: Instance, default: boolean, callback: (boolea
 	}
 end
 
--- Checkbox (unchanged)
+-- Checkbox
 function SubElement.Checkbox(parent: Instance, default: boolean, callback: (boolean) -> ())
 	local state = default and true or false
 
@@ -790,7 +797,7 @@ function SubElement.Checkbox(parent: Instance, default: boolean, callback: (bool
 end
 
 --=============================================================================
--- Colorpicker (unchanged)
+-- Colorpicker
 --=============================================================================
 
 local function BuildColorpicker(holder: Instance, swatch: GuiButton, default: Color3, defaultAlpha: number, callback)
@@ -1091,7 +1098,7 @@ local function BuildColorpicker(holder: Instance, swatch: GuiButton, default: Co
 end
 
 --=============================================================================
--- Section (used inside pages)
+-- Section (Aether‑style: Title, Side)
 --=============================================================================
 
 local Section = {}
@@ -1147,103 +1154,8 @@ function Section:_Order(): number
 	return self._order
 end
 
-function Section:AddButton(options: { [string]: any })
-	local list = options.Buttons or { options }
-
-	local container = Add("Frame", {
-		Parent = self.Content,
-		Active = true,
-		Selectable = true,
-		BackgroundTransparency = 1,
-		Name = "Button",
-		Size = UD2(1, 0, 0, 25),
-		BorderSizePixel = 0,
-		LayoutOrder = self:_Order(),
-	})
-	Corner(container, 5)
-	List(container, {
-		VerticalAlignment = VFA.Center,
-		FillDirection = FD.Horizontal,
-		HorizontalAlignment = HFA.Center,
-		HorizontalFlex = UFA.Fill,
-		Padding = UD(0, 5),
-	})
-
-	local built = {}
-	for index, entry in ipairs(list) do
-		local button = Add("TextButton", {
-			Parent = container,
-			Text = "",
-			AutoButtonColor = false,
-			Name = "Button",
-			TextTruncate = ETT.AtEnd,
-			Size = UD2(1, 0, 0, 25),
-			LayoutOrder = index,
-			BorderSizePixel = 0,
-		})
-		Corner(button, 5)
-		Shadow(button, 0.65)
-		local stroke = Stroke(button, "Border", true)
-		SurfaceGradient(button)
-
-		local flash = Add("Frame", {
-			Parent = button,
-			Name = "Flash",
-			BackgroundTransparency = 1,
-			Size = UFS(1, 1),
-			ZIndex = 2,
-			BorderSizePixel = 0,
-		})
-		Corner(flash, 5)
-		AccentGradient(flash)
-		local flashStroke = Stroke(flash, "AccentLight", true)
-		flashStroke.Transparency = 1
-
-		local label = Text(button, {
-			Name = "Label",
-			Text = entry.Title or entry.Name or "Button",
-			TextTransparency = 0.5,
-			Size = UFS(1, 1),
-			TextTruncate = ETT.SplitWord,
-			ZIndex = 3,
-		})
-		Padding(label, 0, 1)
-
-		Hover(button, function(hovering)
-			Tween(label, Anim.Base, { TextTransparency = hovering and 0 or 0.5 })
-			Tween(stroke, Anim.Base, { Color = hovering and Callisto.Theme.Accent or Callisto.Theme.Border })
-		end)
-		Press(button)
-
-		Connect(button.MouseButton1Click, function()
-			flash.BackgroundTransparency = 0.25
-			flashStroke.Transparency = 0.25
-			Tween(flash, Anim.Slow, { BackgroundTransparency = 1 })
-			Tween(flashStroke, Anim.Slow, { Transparency = 1 })
-			if entry.Callback then
-				task.spawn(entry.Callback)
-			end
-		end)
-
-		TIS(built, { Instance = button, Label = label })
-	end
-
-	return { Instance = container, Buttons = built }
-end
-
-function Section:AddLabel(options: { [string]: any } | string)
-	local opts: { [string]: any } = typeof(options) == "string" and { Title = options } or (options :: any)
-	local row, _, _, label = self:_Row(opts.Title or "Label")
-	return {
-		Instance = row,
-		Set = function(_, value: string)
-			label.Text = value
-		end,
-	}
-end
-
 function Section:AddToggle(options: { [string]: any })
-	local row, _, right = self:_Row(options.Title or "Toggle")
+	local row, _, right = self:_Row(options.Text or options.Title or "Toggle")
 	local flag = options.Flag
 
 	local function fire(state: boolean)
@@ -1271,150 +1183,6 @@ function Section:AddToggle(options: { [string]: any })
 	return control
 end
 
-function Section:AddCheckbox(options: { [string]: any })
-	options.Style = "Checkbox"
-	return self:AddToggle(options)
-end
-
-function Section:AddColorpicker(options: { [string]: any })
-	local row, _, right = self:_Row(options.Title or "Colorpicker")
-	local flag = options.Flag
-
-	local swatch = Add("TextButton", {
-		Parent = right,
-		Text = "",
-		AutoButtonColor = false,
-		Name = "Colorpicker",
-		Size = UFO(16, 16),
-		LayoutOrder = 2,
-		BorderSizePixel = 0,
-	})
-	swatch.BackgroundColor3 = options.Default or Callisto.Theme.Accent
-	Pill(swatch)
-	local swatchStroke = Add("UIStroke", {
-		Parent = swatch,
-		Transparency = 1,
-		BorderOffset = UD(0, 1),
-		ApplyStrokeMode = ASM.Border,
-	})
-	Bind(swatchStroke, { Color = "Accent" })
-
-	Connect(swatch:GetPropertyChangedSignal("GuiState"), function()
-		local hovering = swatch.GuiState == EGS.Hover or swatch.GuiState == EGS.Press
-		Tween(swatchStroke, Anim.Fast, { Transparency = hovering and 0 or 1 })
-	end)
-
-	local picker: any = BuildColorpicker(
-		self.Window.Externals,
-		swatch,
-		options.Default or Callisto.Theme.Accent,
-		options.Alpha or 0,
-		function(color, alpha)
-			if flag then
-				Callisto.Flags[flag] = color
-			end
-			if options.Callback then
-				options.Callback(color, alpha)
-			end
-		end
-	)
-
-	picker.Row = row
-	return picker
-end
-
-local KeybindBlacklist = {
-	[EKC.Unknown] = true,
-}
-
--- Redesigned Keybind: compact frame, auto width, height 16
-function Section:AddKeybind(options: { [string]: any })
-	local _, left = self:_Row(options.Title or "Keybind")
-	local current: EnumItem? = options.Default
-	local binding = false
-
-	local container = Add("Frame", {
-		Parent = left,
-		LayoutOrder = 2,
-		BackgroundTransparency = 0,
-		Size = UD2(0, 34, 0, 16),
-		AutomaticSize = AT.X,
-		BorderSizePixel = 0,
-	})
-	Bind(container, { BackgroundColor3 = "Foreground" })
-	Corner(container, 4)
-	local stroke = Stroke(container, "Border", true)
-
-	local label = Text(container, {
-		ClassName = "TextButton",
-		Text = current and current.Name:upper() or "NONE",
-		TextTransparency = 0.5,
-		TextSize = 12,
-		AutomaticSize = AT.XY,
-		AutoButtonColor = false,
-		Active = true,
-		Selectable = false,
-		Size = UFS(1, 1),
-		TextXAlignment = TXA.Center,
-	})
-	Padding(label, 2, 2, 4, 4)
-
-	local function render()
-		label.Text = binding and "..." or (current and current.Name:upper() or "NONE")
-		Tween(label, Anim.Fast, { TextTransparency = binding and 0 or 0.5 })
-	end
-
-	Connect(label.MouseButton1Click, function()
-		binding = true
-		render()
-	end)
-
-	Hover(label, function(hovering)
-		if not binding then
-			Tween(label, Anim.Fast, { TextTransparency = hovering and 0.2 or 0.5 })
-		end
-	end)
-
-	Connect(UserInputService.InputBegan, function(input, processed)
-		if binding then
-			if input.UserInputType == UIT.Keyboard and not KeybindBlacklist[input.KeyCode] then
-				if input.KeyCode == EKC.Backspace then
-					current = nil
-				else
-					current = input.KeyCode
-				end
-				binding = false
-				render()
-				if options.Flag then
-					Callisto.Flags[options.Flag] = current
-				end
-			end
-			return
-		end
-
-		if processed or not current then
-			return
-		end
-		if input.UserInputType == UIT.Keyboard and input.KeyCode == current and options.Callback then
-			task.spawn(options.Callback, current)
-		end
-	end)
-
-	render()
-
-	return {
-		Instance = container,
-		Get = function()
-			return current
-		end,
-		Set = function(_, key: EnumItem?)
-			current = key
-			render()
-		end,
-	}
-end
-
--- Slider (unchanged)
 function Section:AddSlider(options: { [string]: any })
 	local minimum = options.Min or 0
 	local maximum = options.Max or 100
@@ -1452,7 +1220,7 @@ function Section:AddSlider(options: { [string]: any })
 	local title = Text(textHolder, {
 		Name = "Title",
 		LayoutOrder = 1,
-		Text = options.Title or "slider",
+		Text = options.Text or options.Title or "Slider",
 		TextTruncate = ETT.SplitWord,
 		AutomaticSize = AT.XY,
 	})
@@ -1554,84 +1322,9 @@ function Section:AddSlider(options: { [string]: any })
 	}
 end
 
-function Section:AddInput(options: { [string]: any })
-	local container = Add("Frame", {
-		Parent = self.Content,
-		Name = "Input",
-		BackgroundTransparency = 1,
-		Size = UFS(1, 0),
-		AutomaticSize = AT.Y,
-		BorderSizePixel = 0,
-		LayoutOrder = self:_Order(),
-	})
-	List(container, { VerticalAlignment = VFA.Center, Padding = UD(0, 3) })
-	Padding(container, 1)
-
-	local title = Text(container, {
-		Name = "Title",
-		Text = options.Title or "Input",
-		TextTransparency = 0.3,
-		Position = UFO(21, 0),
-		TextTruncate = ETT.SplitWord,
-		AutomaticSize = AT.XY,
-	})
-	Padding(title, -5, -1)
-
-	local box = Add("Frame", {
-		Parent = container,
-		LayoutOrder = 1,
-		Active = true,
-		Selectable = true,
-		Name = "Button",
-		Size = UD2(1, 0, 0, 25),
-		BorderSizePixel = 0,
-	})
-	Corner(box, 5)
-	local stroke = Stroke(box, "Border", true)
-	Padding(box, 0, 0, 7, 7)
-	Shadow(box, 0.65)
-	SurfaceGradient(box)
-
-	local input = Text(box, {
-		ClassName = "TextBox",
-		Name = "TextLabel",
-		Text = options.Default or "",
-		Size = UFS(1, 1),
-		Selectable = false,
-		TextXAlignment = TXA.Left,
-		TextTruncate = ETT.SplitWord,
-		Active = false,
-		PlaceholderText = options.Placeholder or "something here....",
-		ClearTextOnFocus = options.ClearOnFocus ~= false,
-	})
-
-	Connect(input.Focused, function()
-		Tween(stroke, Anim.Base, { Color = Callisto.Theme.Accent })
-	end)
-	Connect(input.FocusLost, function(enter)
-		Tween(stroke, Anim.Base, { Color = Callisto.Theme.Border })
-		if options.Flag then
-			Callisto.Flags[options.Flag] = input.Text
-		end
-		if options.Callback and (enter or not options.OnEnter) then
-			task.spawn(options.Callback, input.Text, enter)
-		end
-	end)
-
-	return {
-		Instance = container,
-		Get = function()
-			return input.Text
-		end,
-		Set = function(_, value: string)
-			input.Text = value
-		end,
-	}
-end
-
 function Section:AddDropdown(options: { [string]: any })
-	local values = options.Values or options.Options or {}
-	local multi = options.Multi or options.MultiSelect or false
+	local values = options.Options or options.Values or {}
+	local multi = options.Multi or false
 	local selected: { string } = {}
 
 	if options.Default then
@@ -1658,7 +1351,7 @@ function Section:AddDropdown(options: { [string]: any })
 
 	local title = Text(container, {
 		Name = "Title",
-		Text = options.Title or "Dropdown",
+		Text = options.Text or options.Title or "Dropdown",
 		TextTransparency = 0.3,
 		Position = UFO(21, 0),
 		TextTruncate = ETT.SplitWord,
@@ -1881,142 +1574,166 @@ function Section:AddDropdown(options: { [string]: any })
 	}
 end
 
-function Section:AddSwitch(options: { [string]: any })
-	local values = options.Values or {}
-	local index = options.Default or 1
-	local inset = options.Compact and 2 or 1
+function Section:AddColorPicker(options: { [string]: any })
+	local row, _, right = self:_Row(options.Text or options.Title or "ColorPicker")
+	local flag = options.Flag
+
+	local swatch = Add("TextButton", {
+		Parent = right,
+		Text = "",
+		AutoButtonColor = false,
+		Name = "Colorpicker",
+		Size = UFO(16, 16),
+		LayoutOrder = 2,
+		BorderSizePixel = 0,
+	})
+	swatch.BackgroundColor3 = options.Default or Callisto.Theme.Accent
+	Pill(swatch)
+	local swatchStroke = Add("UIStroke", {
+		Parent = swatch,
+		Transparency = 1,
+		BorderOffset = UD(0, 1),
+		ApplyStrokeMode = ASM.Border,
+	})
+	Bind(swatchStroke, { Color = "Accent" })
+
+	Connect(swatch:GetPropertyChangedSignal("GuiState"), function()
+		local hovering = swatch.GuiState == EGS.Hover or swatch.GuiState == EGS.Press
+		Tween(swatchStroke, Anim.Fast, { Transparency = hovering and 0 or 1 })
+	end)
+
+	local picker: any = BuildColorpicker(
+		self.Window.Externals,
+		swatch,
+		options.Default or Callisto.Theme.Accent,
+		options.Transparency or options.Alpha or 0,
+		function(color, alpha)
+			if flag then
+				Callisto.Flags[flag] = color
+			end
+			if options.Callback then
+				options.Callback(color, alpha)
+			end
+		end
+	)
+
+	picker.Row = row
+	return picker
+end
+
+local KeybindBlacklist = {
+	[EKC.Unknown] = true,
+}
+
+-- Keybind (Aether‑style)
+function Section:AddKeyPicker(options: { [string]: any })
+	local _, left = self:_Row(options.Text or options.Title or "Keybind")
+	local current: EnumItem? = options.Default
+	local binding = false
+
+	-- Convert string key to Enum if needed
+	if typeof(options.Default) == "string" then
+		for _, enumItem in next, Enum.KeyCode:GetEnumItems() do
+			if enumItem.Name:lower() == options.Default:lower() then
+				current = enumItem
+				break
+			end
+		end
+	end
 
 	local container = Add("Frame", {
-		Parent = self.Content,
-		Size = UD2(1, 0, 0, 25),
-		Name = "SwitchButton",
-		Active = true,
-		Selectable = true,
+		Parent = left,
+		LayoutOrder = 2,
+		BackgroundTransparency = 0,
+		Size = UD2(0, 34, 0, 16),
+		AutomaticSize = AT.X,
 		BorderSizePixel = 0,
-		LayoutOrder = self:_Order(),
 	})
-	Bind(container, { BackgroundColor3 = "Background" })
-	Corner(container, 5)
-	List(container, {
-		VerticalAlignment = VFA.Center,
-		FillDirection = FD.Horizontal,
-		HorizontalAlignment = HFA.Center,
-		HorizontalFlex = UFA.Fill,
+	Bind(container, { BackgroundColor3 = "Foreground" })
+	Corner(container, 4)
+	local stroke = Stroke(container, "Border", true)
+
+	local label = Text(container, {
+		ClassName = "TextButton",
+		Text = current and current.Name:upper() or "NONE",
+		TextTransparency = 0.5,
+		TextSize = 12,
+		AutomaticSize = AT.XY,
+		AutoButtonColor = false,
+		Active = true,
+		Selectable = false,
+		Size = UFS(1, 1),
+		TextXAlignment = TXA.Center,
 	})
-	Padding(container, inset, inset, inset, inset)
-	Stroke(container, "Border", true)
-	Shadow(container, 0.65)
+	Padding(label, 2, 2, 4, 4)
 
-	local buttons: { any } = {}
-
-	local function render(animate: boolean?)
-		local info = animate == false and TI(0) or Anim.Base
-		for position, entry in next, buttons do
-			local active = position == index
-			Tween(entry.Button, info, { BackgroundTransparency = active and 0 or 1 })
-			Tween(entry.Stroke, info, { Transparency = active and 0 or 1 })
-			Tween(entry.Label, info, {
-				TextTransparency = entry.Disabled and 0.9 or (active and 0 or 0.5),
-			})
-		end
+	local function render()
+		label.Text = binding and "..." or (current and current.Name:upper() or "NONE")
+		Tween(label, Anim.Fast, { TextTransparency = binding and 0 or 0.5 })
 	end
 
-	for position, value in ipairs(values) do
-		local disabled = typeof(value) == "table" and value.Disabled or false
-		local title = typeof(value) == "table" and value.Title or tostring(value)
+	Connect(label.MouseButton1Click, function()
+		binding = true
+		render()
+	end)
 
-		local button = Add("TextButton", {
-			Parent = container,
-			Text = "",
-			AutoButtonColor = false,
-			Name = "Button",
-			BackgroundTransparency = 1,
-			TextTruncate = ETT.AtEnd,
-			Size = UFS(1, 1),
-			LayoutOrder = position,
-			BorderSizePixel = 0,
-		})
-		Corner(button, 4)
-		AccentGradient(button)
-		local buttonStroke = Stroke(button, "AccentLight", true)
-		buttonStroke.Transparency = 1
+	Hover(label, function(hovering)
+		if not binding then
+			Tween(label, Anim.Fast, { TextTransparency = hovering and 0.2 or 0.5 })
+		end
+	end)
 
-		local label = Text(button, {
-			Name = "Label",
-			Text = title,
-			Size = UFS(1, 1),
-			TextTruncate = ETT.SplitWord,
-			Position = UFO(0, -1),
-			TextTransparency = disabled and 0.9 or 0.5,
-		})
-
-		local surface = Add("Frame", {
-			Parent = button,
-			BackgroundTransparency = 1,
-			Size = UFS(1, 1),
-			ZIndex = 0,
-			BorderSizePixel = 0,
-		})
-		Corner(surface, 4)
-		SurfaceGradient(surface)
-
-		TIS(buttons, {
-			Button = button,
-			Label = label,
-			Stroke = buttonStroke,
-			Disabled = disabled,
-		})
-
-		if not disabled then
-			Connect(button.MouseButton1Click, function()
-				if index == position then
-					return
+	Connect(UserInputService.InputBegan, function(input, processed)
+		if binding then
+			if input.UserInputType == UIT.Keyboard and not KeybindBlacklist[input.KeyCode] then
+				if input.KeyCode == EKC.Backspace then
+					current = nil
+				else
+					current = input.KeyCode
 				end
-				index = position
+				binding = false
 				render()
-				if options.Callback then
-					task.spawn(options.Callback, title, position)
+				if options.Flag then
+					Callisto.Flags[options.Flag] = current
 				end
-			end)
-
-			Hover(button, function(hovering)
-				if index == position then
-					return
-				end
-				Tween(label, Anim.Fast, { TextTransparency = hovering and 0.2 or 0.5 })
-			end)
+			end
+			return
 		end
-	end
 
-	render(false)
+		if processed or not current then
+			return
+		end
+		if input.UserInputType == UIT.Keyboard and input.KeyCode == current and options.Callback then
+			task.spawn(options.Callback, current)
+		end
+	end)
+
+	render()
 
 	return {
 		Instance = container,
 		Get = function()
-			local value = values[index]
-			return typeof(value) == "table" and value.Title or value, index
+			return current
 		end,
-		Set = function(_, position: number)
-			index = position
+		Set = function(_, key: EnumItem?)
+			current = key
 			render()
 		end,
 	}
 end
 
 --=============================================================================
--- Page (contains left/right sections)
+-- Tab (Aether‑style: AddSection with Side)
 --=============================================================================
 
-local Page = {}
-Page.__index = Page
+local Tab = {}
+Tab.__index = Tab
 
-function Page:AddSection(side: string, title: string?)
-	local normalized = side and side:lower() or "left"
-	if normalized ~= "left" and normalized ~= "right" then
-		title = side
-		normalized = "left"
-	end
-	local parent = (normalized == "right") and self.Right or self.Left
+function Tab:AddSection(options: { [string]: any })
+	local side = options.Side or "Left"
+	local title = options.Title or "Section"
+
+	local parent = (side:lower() == "right") and self.Right or self.Left
 
 	local section = Add("Frame", {
 		Parent = parent,
@@ -2025,7 +1742,7 @@ function Page:AddSection(side: string, title: string?)
 		AutomaticSize = AT.Y,
 		BorderSizePixel = 0,
 	})
-	Bind(section, { BackgroundColor3 = "Background" })
+	Bind(section, { BackgroundColor3 = "SectionBackground" or "Background" })
 	Stroke(section, "Border", true)
 	Corner(section, 6)
 	Shadow(section, 0.6)
@@ -2036,7 +1753,7 @@ function Page:AddSection(side: string, title: string?)
 		Size = UD2(1, 0, 0, 25),
 		BorderSizePixel = 0,
 	})
-	Bind(header, { BackgroundColor3 = "Foreground" })
+	Bind(header, { BackgroundColor3 = "ElementBackground" or "Foreground" })
 	Add("UICorner", {
 		Parent = header,
 		TopLeftRadius = UD(0, 6),
@@ -2055,7 +1772,7 @@ function Page:AddSection(side: string, title: string?)
 
 	Text(header, {
 		Name = "Title",
-		Text = title or "Section",
+		Text = title,
 		Size = UFS(0, 1),
 		Position = UFO(5, 0),
 		TextTruncate = ETT.SplitWord,
@@ -2079,178 +1796,21 @@ function Page:AddSection(side: string, title: string?)
 		Instance = section,
 		Content = content,
 		Window = self.Window,
-		Page = self,
+		Tab = self,
 		_order = 0,
 	}, Section)
 end
 
 --=============================================================================
--- Tab (sidebar tab with multiple pages/sub‑tabs)
---=============================================================================
-
-local Tab = {}
-Tab.__index = Tab
-
-function Tab:AddPage(name: string)
-	-- Each tab contains a set of pages (sub‑tabs)
-	local pageFrame = Add("Frame", {
-		Parent = self.PageContainer,
-		BackgroundTransparency = 1,
-		Size = UFS(1, 1),
-		Visible = false,
-		BorderSizePixel = 0,
-	})
-
-	local left = Add("ScrollingFrame", {
-		Parent = pageFrame,
-		MidImage = "rbxassetid://83323744952055",
-		TopImage = "rbxassetid://86255327167604",
-		BottomImage = "rbxassetid://79069740978089",
-		ClipsDescendants = false,
-		AutomaticCanvasSize = AT.Y,
-		ScrollBarThickness = 0,
-		Name = "Left",
-		Size = UFS(0.5, 1),
-		Selectable = false,
-		BackgroundTransparency = 1,
-		CanvasSize = UFS(0, 0),
-		BorderSizePixel = 0,
-	})
-	Bind(left, { ScrollBarImageColor3 = "Accent" })
-	Padding(left, 0, 0, 0, 5)
-	List(left, { Padding = UD(0, 10) })
-
-	local right = Add("ScrollingFrame", {
-		Parent = pageFrame,
-		Selectable = false,
-		AnchorPoint = V2(1, 0),
-		CanvasSize = UFS(0, 0),
-		MidImage = "rbxassetid://83323744952055",
-		TopImage = "rbxassetid://86255327167604",
-		BottomImage = "rbxassetid://79069740978089",
-		ClipsDescendants = false,
-		ScrollBarThickness = 0,
-		Name = "Right",
-		Size = UFS(0.5, 1),
-		BackgroundTransparency = 1,
-		Position = UFS(1, 0),
-		AutomaticCanvasSize = AT.Y,
-		BorderSizePixel = 0,
-	})
-	Bind(right, { ScrollBarImageColor3 = "Accent" })
-	Padding(right, 0, 0, 5, 0)
-	List(right, { Padding = UD(0, 10) })
-
-	-- Sub‑tab button (appears in the horizontal bar)
-	local subButton = Add("TextButton", {
-		Parent = self.SubTabHolder,
-		FontFace = FN(FONT_ID, FW.Medium, FS.Normal),
-		Active = true,
-		Text = "",
-		AutoButtonColor = false,
-		Selectable = false,
-		Size = UFS(0, 1),
-		Name = "SubTab",
-		BackgroundTransparency = 1,
-		AutomaticSize = AT.X,
-		BorderSizePixel = 0,
-		LayoutOrder = #self.Pages + 1,
-	})
-	subButton.BackgroundColor3 = WHITE
-	Corner(subButton, 4)
-	Padding(subButton, 0, 0, 6, 6)
-	local subStroke = Stroke(subButton, "AccentLight", true)
-	subStroke.Transparency = 1
-	local subGradient = Add("UIGradient", { Parent = subButton, Rotation = 90 })
-	BindGradient(subGradient, { { 0, "Accent" }, { 1, "AccentDark" } })
-	local subShadow = Shadow(subButton, 1, "Accent")
-
-	local subLabel = Text(subButton, {
-		FontFace = FN(FONT_ID, FW.Medium, FS.Normal),
-		Text = name,
-		TextTransparency = 0.5,
-		BackgroundTransparency = 1,
-		Size = UFS(1, 1),
-		AutomaticSize = AT.XY,
-		TextSize = 14,
-	})
-
-	local pageObj = setmetatable({
-		Name = name,
-		Instance = pageFrame,
-		Left = left,
-		Right = right,
-		SubButton = subButton,
-		Tab = self,
-	}, Page)
-
-	-- Activation function for sub‑tab
-	local function setActive(active: boolean, animate: boolean?)
-		local info = animate == false and TI(0) or Anim.Base
-		Tween(subButton, info, { BackgroundTransparency = active and 0 or 1 })
-		Tween(subStroke, info, { Transparency = active and 0 or 1 })
-		Tween(subLabel, info, { TextTransparency = active and 0 or 0.5 })
-		if subShadow then
-			Tween(subShadow, info, { Transparency = active and 0.65 or 1 })
-		end
-	end
-	pageObj.SetActive = setActive
-
-	Connect(subButton.MouseButton1Click, function()
-		self:SelectPage(pageObj)
-	end)
-
-	Hover(subButton, function(hovering)
-		if self.CurrentPage == pageObj then
-			return
-		end
-		Tween(subLabel, Anim.Fast, { TextTransparency = hovering and 0.2 or 0.5 })
-	end)
-
-	setActive(false, false)
-	TIS(self.Pages, pageObj)
-
-	if not self.CurrentPage then
-		self:SelectPage(pageObj)
-	end
-
-	return pageObj
-end
-
-function Tab:SelectPage(page: any)
-	if self.CurrentPage == page then
-		return
-	end
-
-	local previous = self.CurrentPage
-	self.CurrentPage = page
-
-	for _, other in next, self.Pages do
-		other.SetActive(other == page)
-	end
-
-	if previous then
-		local frame = previous.Instance
-		Fader.Out(frame, TI(0))
-		frame.Visible = false
-		frame.Position = UFO(0, 0)
-	end
-
-	page.Instance.Position = UFO(0, 8)
-	page.Instance.Visible = true
-	Fader.In(page.Instance, Anim.Slow)
-	Tween(page.Instance, Anim.Slow, { Position = UFO(0, 0) })
-end
-
---=============================================================================
--- Window (top‑level container)
+-- Window (Aether‑style: CreateWindow, AddTab, Notify)
 --=============================================================================
 
 local Window = {}
 Window.__index = Window
 
-function Window:AddTab(name: string, icon: string?)
-	icon = icon or "rbxassetid://108020878442937"
+function Window:AddTab(options: { [string]: any })
+	local name = options.Text or "Tab"
+	local icon = options.Icon or "rbxassetid://108020878442937"
 
 	-- Sidebar button
 	local button = Add("TextButton", {
@@ -2273,7 +1833,7 @@ function Window:AddTab(name: string, icon: string?)
 
 	local iconLabel = Add("ImageLabel", {
 		Parent = button,
-		ImageColor3 = Callisto.Theme.Unselected or RGB(170,170,170),
+		ImageColor3 = Callisto.Theme.Unselected,
 		Image = icon,
 		BackgroundTransparency = 1,
 		Size = UFO(21, 21),
@@ -2282,7 +1842,7 @@ function Window:AddTab(name: string, icon: string?)
 		BorderSizePixel = 0,
 	})
 	Bind(iconLabel, { ImageColor3 = "Unselected" })
-	-- We'll use TextColor3 for the label
+
 	local label = Text(button, {
 		FontFace = FN(FONT_ID, FW.Medium, FS.Normal),
 		Text = name,
@@ -2295,7 +1855,7 @@ function Window:AddTab(name: string, icon: string?)
 	})
 	Bind(label, { TextColor3 = "Unselected" })
 
-	-- Glow / active indicator (like in source)
+	-- Glow indicator
 	local glow = Add("Frame", {
 		Parent = button,
 		BackgroundTransparency = 1,
@@ -2304,19 +1864,8 @@ function Window:AddTab(name: string, icon: string?)
 	})
 	Bind(glow, { BackgroundColor3 = "Accent" })
 	Corner(glow, 3)
-	Add("ImageLabel", {
-		Parent = glow,
-		ImageColor3 = Callisto.Theme.Accent,
-		ImageTransparency = 1,
-		ScaleType = SCL.Slice,
-		Size = UD2(1, 20, 1, 20),
-		Position = UFO(-20, -10),
-		Image = "rbxassetid://18245826428",
-		SliceCenter = Rect.new(20,20,80,80),
-		BackgroundTransparency = 1,
-	})
 
-	-- Container for this tab's pages (sub‑tabs)
+	-- Page container
 	local pageContainer = Add("Frame", {
 		Parent = self.PagesContainer,
 		BackgroundTransparency = 1,
@@ -2325,20 +1874,47 @@ function Window:AddTab(name: string, icon: string?)
 		BorderSizePixel = 0,
 	})
 
-	-- Sub‑tab holder (horizontal bar) inside this tab's area
-	local subTabHolder = Add("Frame", {
-		Parent = self.SubTabArea,
+	-- Left column
+	local left = Add("ScrollingFrame", {
+		Parent = pageContainer,
+		MidImage = "rbxassetid://83323744952055",
+		TopImage = "rbxassetid://86255327167604",
+		BottomImage = "rbxassetid://79069740978089",
+		ClipsDescendants = false,
+		AutomaticCanvasSize = AT.Y,
+		ScrollBarThickness = 0,
+		Name = "Left",
+		Size = UFS(0.5, 1),
+		Selectable = false,
 		BackgroundTransparency = 1,
-		Size = UD2(1, 0, 0, 30),
-		Visible = false,
+		CanvasSize = UFS(0, 0),
 		BorderSizePixel = 0,
 	})
-	List(subTabHolder, {
-		FillDirection = FD.Horizontal,
-		Padding = UD(0, 5),
-		VerticalAlignment = VFA.Center,
+	Bind(left, { ScrollBarImageColor3 = "Accent" })
+	Padding(left, 0, 0, 0, 5)
+	List(left, { Padding = UD(0, 10) })
+
+	-- Right column
+	local right = Add("ScrollingFrame", {
+		Parent = pageContainer,
+		Selectable = false,
+		AnchorPoint = V2(1, 0),
+		CanvasSize = UFS(0, 0),
+		MidImage = "rbxassetid://83323744952055",
+		TopImage = "rbxassetid://86255327167604",
+		BottomImage = "rbxassetid://79069740978089",
+		ClipsDescendants = false,
+		ScrollBarThickness = 0,
+		Name = "Right",
+		Size = UFS(0.5, 1),
+		BackgroundTransparency = 1,
+		Position = UFS(1, 0),
+		AutomaticCanvasSize = AT.Y,
+		BorderSizePixel = 0,
 	})
-	Padding(subTabHolder, 0, 0, 10, 10)
+	Bind(right, { ScrollBarImageColor3 = "Accent" })
+	Padding(right, 0, 0, 5, 0)
+	List(right, { Padding = UD(0, 10) })
 
 	local tabObj = setmetatable({
 		Name = name,
@@ -2347,34 +1923,32 @@ function Window:AddTab(name: string, icon: string?)
 		Icon = iconLabel,
 		Label = label,
 		PageContainer = pageContainer,
-		SubTabHolder = subTabHolder,
-		Pages = {},
-		CurrentPage = nil,
+		Left = left,
+		Right = right,
 		Window = self,
 	}, Tab)
 
-	-- Activation function for the tab itself
-	local function setTabActive(active: boolean, animate: boolean?)
+	-- Activation
+	local function setActive(active: boolean, animate: boolean?)
 		local info = animate == false and TI(0) or Anim.Base
 		Tween(button, info, { BackgroundTransparency = active and 0 or 1 })
 		Tween(glow, info, { BackgroundTransparency = active and 0 or 1 })
 		Tween(label, info, { TextTransparency = active and 0 or 0.5 })
-		-- Also update icon color? We'll keep it simple.
 		if active then
 			label.TextColor3 = Callisto.Theme.Accent
 			iconLabel.ImageColor3 = Callisto.Theme.Accent
 		else
-			label.TextColor3 = Callisto.Theme.Unselected or RGB(170,170,170)
-			iconLabel.ImageColor3 = Callisto.Theme.Unselected or RGB(170,170,170)
+			label.TextColor3 = Callisto.Theme.Unselected
+			iconLabel.ImageColor3 = Callisto.Theme.Unselected
 		end
 	end
-	tabObj.SetActive = setTabActive
+	tabObj.SetActive = setActive
 
 	Connect(button.MouseButton1Click, function()
 		self:SelectTab(tabObj)
 	end)
 
-	setTabActive(false, false)
+	setActive(false, false)
 	TIS(self.Tabs, tabObj)
 
 	if not self.CurrentTab then
@@ -2398,25 +1972,18 @@ function Window:SelectTab(tab: any)
 
 	if previous then
 		previous.PageContainer.Visible = false
-		previous.SubTabHolder.Visible = false
 	end
 
 	tab.PageContainer.Visible = true
-	tab.SubTabHolder.Visible = true
-
-	-- Ensure the first page is selected if none
-	if not tab.CurrentPage and #tab.Pages > 0 then
-		tab:SelectPage(tab.Pages[1])
-	end
 end
 
 function Window:SetTitle(title: string)
 	self.Title.Text = title
 end
 
-function Window:SetSubTitle(sub: string)
-	if self.SubTitle then
-		self.SubTitle.Text = sub
+function Window:SetSubText(sub: string)
+	if self.SubText then
+		self.SubText.Text = sub
 	end
 end
 
@@ -2464,12 +2031,55 @@ function Window:Destroy()
 end
 
 --=============================================================================
--- CreateWindow
+-- Notifications
+--=============================================================================
+
+local NotificationY = 0
+
+function Callisto:Notify(options: { [string]: any })
+	local title = options.Title or "Notification"
+	local lifetime = options.Lifetime or 5
+
+	local notif = Add("CanvasGroup", {
+		Parent = self.NotificationContainer,
+		GroupTransparency = 0,
+		BackgroundTransparency = 0,
+		Size = UD2(0, 0, 0, 30),
+		AutomaticSize = AT.XY,
+		BorderSizePixel = 0,
+		Position = UD2(0, 10, 0, 10 + NotificationY),
+	})
+	Bind(notif, { BackgroundColor3 = "Foreground" })
+	Corner(notif, 4)
+	Stroke(notif, "Border", true)
+
+	local label = Text(notif, {
+		Text = title,
+		TextSize = 14,
+		AutomaticSize = AT.XY,
+		Size = UFS(1, 1),
+	})
+	Padding(label, 4, 4, 10, 10)
+
+	NotificationY += 40
+
+	task.delay(lifetime, function()
+		Tween(notif, Anim.Fast, { GroupTransparency = 1 })
+		task.delay(0.2, function()
+			notif:Destroy()
+			NotificationY = NotificationY - 40
+		end)
+	end)
+end
+
+--=============================================================================
+-- CreateWindow (Aether‑style)
 --=============================================================================
 
 function Callisto:CreateWindow(options: { [string]: any }?)
 	local opts: { [string]: any } = options or {}
-	local size = opts.Size or V2(700, 500)  -- slightly wider to fit sidebar
+	local size = opts.Size or UDim2.fromOffset(775, 531)
+	local isMobile = opts.IsMobile or false
 
 	local root = Add("Folder", { Parent = GetParentGui(), Name = "Callisto" })
 
@@ -2488,7 +2098,7 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 		Name = "Canvas",
 		AnchorPoint = V2(0.5, 0.5),
 		Position = UFS(0.5, 0.5),
-		Size = UFO(size.X, size.Y),
+		Size = size,
 		BorderSizePixel = 0,
 	})
 	Bind(canvas, { BackgroundColor3 = "Background" })
@@ -2496,21 +2106,23 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 	Shadow(canvas, 0.65)
 	Corner(canvas, 10)
 
-	-- Header (Title + SubTitle)
+	-- Header (Title + SubText)
 	local header = Add("Frame", {
 		Parent = canvas,
 		Name = "Header",
-		Size = UD2(1, 0, 0, 45),
+		Size = UD2(1, 0, 0, 71),
 		BorderSizePixel = 0,
 	})
 	Bind(header, { BackgroundColor3 = "Foreground" })
 	Add("UICorner", { Parent = header, BottomRightRadius = UD(0, 0), BottomLeftRadius = UD(0, 0) })
 	Stroke(header, "Border")
 
+	-- Title area
 	local titleFrame = Add("Frame", {
 		Parent = header,
 		BackgroundTransparency = 1,
-		Size = UFS(0.5, 1),  -- left half for title
+		Size = UD2(1, -178, 1, 0),
+		Position = UFO(178, 0),
 		BorderSizePixel = 0,
 	})
 	Padding(titleFrame, 5, 5, 10, 10)
@@ -2526,21 +2138,21 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 		AutomaticSize = AT.XY,
 		TextXAlignment = TXA.Left,
 	})
-	local subtitle = Text(titleFrame, {
-		Name = "SubTitle",
-		Text = opts.SubTitle or "SubTitle",
+	local subText = Text(titleFrame, {
+		Name = "SubText",
+		Text = opts.SubText or "SubTitle",
 		TextSize = 13,
 		TextTransparency = 0.5,
 		AutomaticSize = AT.XY,
 		TextXAlignment = TXA.Left,
 	})
 
-	-- Main layout: sidebar + content
+	-- Main layout
 	local mainFrame = Add("Frame", {
 		Parent = canvas,
 		BackgroundTransparency = 1,
-		Position = UFO(0, 45),
-		Size = UD2(1, 0, 1, -45),
+		Position = UFO(0, 71),
+		Size = UD2(1, 0, 1, -71),
 		BorderSizePixel = 0,
 	})
 	List(mainFrame, { FillDirection = FD.Horizontal })
@@ -2559,32 +2171,24 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 	Padding(sidebar, 10, 10, 10, 10)
 	List(sidebar, { Padding = UD(0, 8) })
 
-	-- Content area (right of sidebar)
+	-- Content area
 	local contentArea = Add("Frame", {
 		Parent = mainFrame,
 		BackgroundTransparency = 1,
 		Size = UD2(1, -178, 1, 0),
 		BorderSizePixel = 0,
 	})
-	List(contentArea, { FillDirection = FD.Vertical })
+	Padding(contentArea, 5, 5, 10, 10)
 
-	-- Sub‑tab bar (horizontal area for page buttons)
-	local subTabArea = Add("Frame", {
-		Parent = contentArea,
-		BackgroundTransparency = 1,
-		Size = UD2(1, 0, 0, 30),
-		BorderSizePixel = 0,
-	})
-	-- Pages container (holds the actual page frames)
+	-- Pages container
 	local pagesContainer = Add("Frame", {
 		Parent = contentArea,
 		BackgroundTransparency = 1,
-		Size = UD2(1, 0, 1, -30),
+		Size = UFS(1, 1),
 		BorderSizePixel = 0,
 	})
-	Padding(pagesContainer, 5, 5, 10, 10)
 
-	-- Footer (unchanged)
+	-- Footer
 	local footer = Add("Frame", {
 		Parent = canvas,
 		AnchorPoint = V2(0, 1),
@@ -2632,19 +2236,29 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 		BorderSizePixel = 0,
 	})
 
+	-- Notification container
+	local notifContainer = Add("Frame", {
+		Parent = screenGui,
+		Name = "Notifications",
+		BackgroundTransparency = 1,
+		Size = UFS(1, 1),
+		ZIndex = 200,
+		BorderSizePixel = 0,
+	})
+
 	local window: any = setmetatable({
 		Root = root,
 		ScreenGui = screenGui,
 		Canvas = canvas,
 		Header = header,
 		Title = title,
-		SubTitle = subtitle,
+		SubText = subText,
 		Sidebar = sidebar,
-		TabHolder = sidebar,  -- the scrolling frame is the tab holder
-		SubTabArea = subTabArea,
+		TabHolder = sidebar,
 		PagesContainer = pagesContainer,
 		Footer = footer,
 		Externals = externals,
+		NotificationContainer = notifContainer,
 		Tabs = {},
 		CurrentTab = nil,
 		Visible = true,
