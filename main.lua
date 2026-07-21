@@ -1,25 +1,7 @@
 --!strict
 --[[
 	Callisto — single-file UI library
-	Rebuilt from the original instance dump. Visuals are byte-for-byte the same
-	properties; everything else is structure, animation and theming.
-
-	Animation rules honoured throughout:
-	  - NO element ever changes size for aesthetic purposes. All feedback is
-	    transparency, colour, position or rotation.
-	  - NO CanvasGroups anywhere: they flatten UIGradients over child text and
-	    have too many rendering caveats. Windows and popups fade through the
-	    Fader, which cascades transparency tweens over every descendant.
-	  - The slider fill DOES resize, instantly and untweened — that is the
-	    value display, not an animation.
-
-	local Callisto = loadstring(game:HttpGet("..."))()
-
-	local Window = Callisto:CreateWindow({ Title = "Callisto", Size = Vector2.new(591, 480) })
-	local Page   = Window:AddPage("General")
-	local Left   = Page:AddSection("Left", "Section #1")
-
-	Left:AddToggle({ Title = "Toggle", Default = false, Callback = print })
+	(Modified styling: darker theme, lighter section headers, compact padding)
 ]]
 
 local Players = game:GetService("Players")
@@ -30,7 +12,7 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
 --=============================================================================
--- Shorthands (kept from the original source)
+-- Shorthands
 --=============================================================================
 
 local CSK = ColorSequenceKeypoint.new
@@ -88,19 +70,17 @@ Callisto.Windows = {} :: { any }
 Callisto.Connections = {} :: { RBXScriptConnection }
 
 --=============================================================================
--- Theme
+-- Theme (updated colours)
 --=============================================================================
 
--- Every colour the original file used, named. Derived accent/foreground shades
--- default to the exact literals from the dump so nothing shifts visually.
 local DefaultTheme = {
-	Background = RGB(24, 26, 27),
-	Foreground = RGB(31, 34, 35),
-	ForegroundLight = RGB(38, 41, 42),
-	Border = RGB(45, 48, 49),
-	Accent = RGB(0, 120, 255),
-	AccentLight = RGB(77, 163, 255),
-	AccentDark = RGB(0, 86, 178),
+	Background = RGB(20, 22, 24),
+	Foreground = RGB(30, 33, 35),
+	ForegroundLight = RGB(40, 43, 45),
+	Border = RGB(48, 51, 53),
+	Accent = RGB(0, 140, 255),
+	AccentLight = RGB(77, 180, 255),
+	AccentDark = RGB(0, 100, 200),
 	Text = RGB(255, 255, 255),
 }
 
@@ -132,8 +112,7 @@ local function BindGradient(gradient: UIGradient, stops: { { any } })
 end
 
 -- Paints every registered property/gradient at `alpha` between the previous
--- theme snapshot and the current one. Gradients are rebuilt keypoint-by-
--- keypoint, which is the only way to animate UIGradient.Color at all.
+-- theme snapshot and the current one.
 local function PaintTheme(alpha: number, previous: { [string]: Color3 })
 	for instance, map in next, ColorRegistry do
 		if not instance.Parent then
@@ -160,17 +139,6 @@ local function PaintTheme(alpha: number, previous: { [string]: Color3 })
 	end
 end
 
---[[
-	SetTheme({ Accent = Color3.fromRGB(255, 80, 120) })
-
-	Only pass the keys you care about. AccentLight / AccentDark / ForegroundLight
-	are re-derived automatically unless you pass them explicitly — the derivation
-	(+/- 30% toward white/black) reproduces the original literals for the default
-	accent, so the stock look is preserved exactly.
-
-	The repaint animates over ~0.25s (gradients included); pass `false` as the
-	second argument for an instant swap.
-]]
 function Callisto:SetTheme(theme: { [string]: Color3 }, animate: boolean?)
 	local previous = table.clone(self.Theme)
 
@@ -227,7 +195,6 @@ local function Add(class: string, properties: { [string]: any }?): any
 	end
 
 	if properties then
-		-- Parent is applied last so a half-configured instance is never rendered.
 		local parent = properties.Parent
 		for key, value in next, properties do
 			if key == "Parent" then
@@ -248,7 +215,6 @@ local function Add(class: string, properties: { [string]: any }?): any
 	return instance
 end
 
--- Animation constants. One place to retune the whole library's feel.
 local Anim = {
 	Fast = TI(0.12, ES.Quad, ED.Out),
 	Base = TI(0.18, ES.Quad, ED.Out),
@@ -268,7 +234,6 @@ local function Connect(signal: RBXScriptSignal, callback)
 	return connection
 end
 
--- Fires callback(hovering: boolean).
 local function Hover(button: GuiButton, callback: (boolean) -> ())
 	Connect(button.MouseEnter, function()
 		callback(true)
@@ -278,7 +243,6 @@ local function Hover(button: GuiButton, callback: (boolean) -> ())
 	end)
 end
 
--- Standard press feedback: a short transparency dip. Never a size change.
 local function Press(button: GuiButton)
 	Connect(button.MouseButton1Down, function()
 		Tween(button, Anim.Fast, { BackgroundTransparency = 0.15 })
@@ -292,11 +256,6 @@ end
 
 --=============================================================================
 -- Fader — whole-tree fades without CanvasGroups
---
--- Fader.Out captures every descendant's rest transparency (only when the tree
--- is at rest, so interrupted animations never pollute the cache) and tweens
--- everything to fully transparent. Fader.In tweens everything back to the
--- captured values.
 --=============================================================================
 
 local Fader = {}
@@ -313,18 +272,13 @@ Fader.Properties = {
 	UIShadow = { "Transparency" },
 }
 
--- root -> { instance -> { property -> restValue } }
 Fader.Cache = {} :: { [Instance]: { [Instance]: { [string]: number } } }
--- root -> "shown" | "showing" | "hidden" (absent = shown, never faded)
 Fader.State = {} :: { [Instance]: string }
--- root -> generation counter, so stale task.delay callbacks are ignored
 Fader.Token = {} :: { [Instance]: number }
 
 function Fader.Out(root: Instance, info: TweenInfo)
 	local state = Fader.State[root]
 
-	-- capture fresh rest values only when the tree is fully at rest; if we are
-	-- interrupting a fade-in, the existing cache still holds the true values
 	if state == nil or state == "shown" then
 		local cache = {}
 		local targets = root:GetDescendants()
@@ -345,8 +299,6 @@ function Fader.Out(root: Instance, info: TweenInfo)
 	Fader.State[root] = "hidden"
 	Fader.Token[root] = (Fader.Token[root] or 0) + 1
 
-	-- zero-duration TweenService tweens apply a frame LATE, which breaks the
-	-- park-transparent-then-fade-in pattern — instant fades set directly
 	local instant = info.Time <= 0
 
 	for target, values in next, Fader.Cache[root] do
@@ -372,7 +324,7 @@ end
 function Fader.In(root: Instance, info: TweenInfo)
 	local cache = Fader.Cache[root]
 	if not cache then
-		return -- never faded out: already fully visible
+		return
 	end
 
 	local token = (Fader.Token[root] or 0) + 1
@@ -405,8 +357,6 @@ function Fader.In(root: Instance, info: TweenInfo)
 	end
 end
 
--- Drop every cached root that lives under `ancestor` (called before the
--- instances are destroyed, while ancestry is still intact).
 function Fader.Forget(ancestor: Instance)
 	for root in next, Fader.Cache do
 		if root == ancestor or root:IsDescendantOf(ancestor) then
@@ -424,8 +374,6 @@ function Fader.Clear()
 end
 
 local function GetParentGui(): Instance
-	-- gethui is an executor-injected global; reach it through the function
-	-- environment so plain Luau tooling doesn't flag an unknown global
 	local ok, hui = pcall(function()
 		return ((getfenv() :: any).gethui)()
 	end)
@@ -443,9 +391,6 @@ local function GetParentGui(): Instance
 	return (success and core) or LocalPlayer:WaitForChild("PlayerGui")
 end
 
--- Draggable: smooth, frame-rate independent follow. The lerp loop only runs
--- while dragging (and briefly afterwards, to settle), so it never fights the
--- position tweens the open/close animations play on the same target.
 local function MakeDraggable(handle: GuiObject, target: GuiObject)
 	local dragging, dragStart, startPosition = false, Vector3.zero, UD2()
 	local goal = target.Position
@@ -507,8 +452,6 @@ local function MakeDraggable(handle: GuiObject, target: GuiObject)
 	end)
 end
 
--- User-driven resizing. This changes Size, but it is direct manipulation of
--- the window by the user — not an animation — so it does not break the rule.
 local function MakeResizable(handle: GuiButton, target: GuiObject, minimum: Vector2)
 	local resizing, startPosition, startSize = false, Vector3.zero, V2()
 
@@ -544,14 +487,13 @@ local function MakeResizable(handle: GuiButton, target: GuiObject, minimum: Vect
 end
 
 --=============================================================================
--- Shared primitives — the exact decorations the dump applied over and over
+-- Shared primitives
 --=============================================================================
 
 local function Corner(parent: Instance, radius: number?): UICorner
 	return Add("UICorner", { Parent = parent, CornerRadius = radius and UD(0, radius) or nil })
 end
 
--- Fully rounded (capsule) corner — UD(1, 0).
 local function Pill(parent: Instance): UICorner
 	return Add("UICorner", { Parent = parent, CornerRadius = UD(1, 0) })
 end
@@ -566,8 +508,6 @@ local function Stroke(parent: Instance, key: string?, inner: boolean?): UIStroke
 	return stroke
 end
 
--- UIShadow is not available on every client; Add() returns nil there and every
--- caller guards, so the library degrades to shadowless rendering gracefully.
 local function Shadow(parent: Instance, transparency: number?, key: string?): any
 	local shadow = Add("UIShadow", {
 		Parent = parent,
@@ -580,13 +520,8 @@ local function Shadow(parent: Instance, transparency: number?, key: string?): an
 	return shadow
 end
 
--- IMPORTANT: UIGradient colours MULTIPLY with the element's BackgroundColor3.
--- The dump therefore gives every gradient carrier a plain white background so
--- the gradient's own colours render unmodified. These helpers enforce that —
--- theming flows entirely through the gradient keypoints, never the background.
 local WHITE = RGB(255, 255, 255)
 
--- The "raised control" gradient every button/input/toggle shared.
 local function SurfaceGradient(parent: Instance): UIGradient
 	(parent :: any).BackgroundColor3 = WHITE
 	local gradient = Add("UIGradient", { Parent = parent, Rotation = 90 })
@@ -626,7 +561,6 @@ local function Text(parent: Instance, properties: { [string]: any }): any
 	props.TextSize = props.TextSize or 14
 	props.BorderSizePixel = 0
 
-	-- ClassName is a pseudo-key for this helper, not a real property
 	local class = props.ClassName or "TextLabel"
 	props.ClassName = nil
 
@@ -642,10 +576,6 @@ local function Text(parent: Instance, properties: { [string]: any }): any
 	return label
 end
 
--- Popup container: a plain Frame (NOT a CanvasGroup — those flatten gradients
--- over child text). Open/close fades run through the Fader.
--- Pass a theme key for a solid background; omit it when the popup carries a
--- colour gradient (the gradient helper will set the white base itself).
 local function PopupFrame(parent: Instance, name: string, backgroundKey: string?): any
 	local frame = Add("Frame", {
 		Parent = parent,
@@ -661,18 +591,11 @@ local function PopupFrame(parent: Instance, name: string, backgroundKey: string?
 	return frame
 end
 
--- Converts an on-screen point into a Position local to `holder`. Popups are
--- parented to the Externals frame, whose origin is NOT the screen origin on an
--- IgnoreGuiInset ScreenGui — subtracting the holder's own AbsolutePosition
--- makes the maths inset-proof.
 local function ToHolderSpace(holder: Instance, x: number, y: number): UDim2
 	local origin: Vector2 = (holder :: any).AbsolutePosition
 	return UFO(MR(x - origin.X), MR(y - origin.Y))
 end
 
--- Shared open/close animation for popups: Fader cascade + an 8px vertical
--- slide. Position and transparency only; the popup's size is set before
--- opening and never animated.
 local function AnimatePopup(popup: GuiObject, open: boolean, basePosition: UDim2)
 	if open then
 		popup.Position = basePosition + UD2(0, 0, 0, 8)
@@ -698,13 +621,11 @@ local function InsideBounds(mouse: Vector2, object: GuiObject): boolean
 end
 
 --=============================================================================
--- Sub-elements (things that live in a row's right-hand content)
+-- Sub-elements
 --=============================================================================
 
 local SubElement = {}
 
--- Toggle: pill switch. Off = Toggle template, On = ToggleE template.
--- The knob slides (position) and everything else crossfades; nothing resizes.
 function SubElement.Toggle(parent: Instance, default: boolean, callback: (boolean) -> ())
 	local state = default and true or false
 
@@ -721,7 +642,6 @@ function SubElement.Toggle(parent: Instance, default: boolean, callback: (boolea
 	local outerStroke = Stroke(button, "Border", true)
 	local glow = Shadow(button, 0.65, "Accent")
 
-	-- accent fill, faded in when active
 	local fill = Add("Frame", {
 		Parent = button,
 		Name = "Gradient",
@@ -770,10 +690,9 @@ function SubElement.Toggle(parent: Instance, default: boolean, callback: (boolea
 		task.spawn(callback, state)
 	end)
 
-	-- hover feedback: knob brightens slightly (transparency only)
 	Hover(button, function(hovering)
 		if state then
-			return -- already fully opaque when on
+			return
 		end
 		Tween(knob, Anim.Fast, { BackgroundTransparency = hovering and 0.6 or 0.8 })
 	end)
@@ -791,8 +710,6 @@ function SubElement.Toggle(parent: Instance, default: boolean, callback: (boolea
 	}
 end
 
--- Checkbox: square with a tick. Off = Checkbox, On = CheckboxE.
--- The tick fades in while springing from a slight rotation — no size change.
 function SubElement.Checkbox(parent: Instance, default: boolean, callback: (boolean) -> ())
 	local state = default and true or false
 
@@ -873,7 +790,7 @@ function SubElement.Checkbox(parent: Instance, default: boolean, callback: (bool
 end
 
 --=============================================================================
--- Colorpicker popup (Externals.Colorpicker)
+-- Colorpicker popup
 --=============================================================================
 
 local function BuildColorpicker(holder: Instance, swatch: GuiButton, default: Color3, defaultAlpha: number, callback)
@@ -923,9 +840,6 @@ local function BuildColorpicker(holder: Instance, swatch: GuiButton, default: Co
 	})
 	Shadow(hueBar, 0.65)
 
-	-- Selectors must never sink input: once a click parks one under the
-	-- cursor, an Active selector would swallow every following press and the
-	-- track would stop receiving drags.
 	local hueSelector = Add("TextButton", {
 		Parent = hueBar,
 		Text = "",
@@ -1071,10 +985,6 @@ local function BuildColorpicker(holder: Instance, swatch: GuiButton, default: Co
 
 		svGradient.Color = CS({ CSK(0, RGB(255, 255, 255)), CSK(1, HSV(hue, 1, 1)) })
 
-		-- Selector travel: the 10px knob plus a 1px margin each side must stay
-		-- inside the track, so the pixel offset counter-travels 12px across the
-		-- full scale range (at scale 0 the offset is +1/+11, at scale 1 it is
-		-- -11/-1 depending on the anchor).
 		Tween(hueSelector, info, { Position = UD2(hue, 1 - 12 * hue, 0.5, 0) })
 		Tween(alphaSelector, info, { Position = UD2(0.5, 0, alpha, 1 - 12 * alpha) })
 		Tween(svSelector, info, {
@@ -1084,7 +994,6 @@ local function BuildColorpicker(holder: Instance, swatch: GuiButton, default: Co
 		task.spawn(callback, color, alpha)
 	end
 
-	-- Generic click-and-drag binding for the three tracks.
 	local function BindTrack(track: GuiObject, apply: (Vector2) -> ())
 		local dragging = false
 
@@ -1148,7 +1057,6 @@ local function BuildColorpicker(holder: Instance, swatch: GuiButton, default: Co
 		setOpen(not open)
 	end)
 
-	-- Click-away closes the popup.
 	Connect(UserInputService.InputBegan, function(input, processed)
 		if processed or not open then
 			return
@@ -1164,8 +1072,6 @@ local function BuildColorpicker(holder: Instance, swatch: GuiButton, default: Co
 
 	render(false)
 
-	-- prime the fader: capture rest values now that the panel is fully built,
-	-- and park everything transparent for the first fade-in
 	Fader.Out(panel, TI(0))
 
 	return {
@@ -1185,13 +1091,12 @@ local function BuildColorpicker(holder: Instance, swatch: GuiButton, default: Co
 end
 
 --=============================================================================
--- Section — holds elements
+-- Section (modified styling)
 --=============================================================================
 
 local Section = {}
 Section.__index = Section
 
--- Every labelled control (toggle/checkbox/colorpicker/keybind) shares this row.
 function Section:_Row(title: string)
 	local row = Add("Frame", {
 		Parent = self.Content,
@@ -1242,12 +1147,6 @@ function Section:_Order(): number
 	return self._order
 end
 
---== Button ===================================================================
-
---[[
-	Section:AddButton({ Title = "single button", Callback = function() end })
-	Section:AddButton({ Buttons = { {Title="a",Callback=f}, {Title="b",Callback=g} } })
-]]
 function Section:AddButton(options: { [string]: any })
 	local list = options.Buttons or { options }
 
@@ -1287,8 +1186,6 @@ function Section:AddButton(options: { [string]: any })
 		local stroke = Stroke(button, "Border", true)
 		SurfaceGradient(button)
 
-		-- accent flash layer: blinks in on click, then bleeds back out.
-		-- Transparency only — the button never moves or resizes.
 		local flash = Add("Frame", {
 			Parent = button,
 			Name = "Flash",
@@ -1334,12 +1231,9 @@ function Section:AddButton(options: { [string]: any })
 	return { Instance = container, Buttons = built }
 end
 
---== Label ====================================================================
-
 function Section:AddLabel(options: { [string]: any } | string)
 	local opts: { [string]: any } = typeof(options) == "string" and { Title = options } or (options :: any)
 	local row, _, _, label = self:_Row(opts.Title or "Label")
-
 	return {
 		Instance = row,
 		Set = function(_, value: string)
@@ -1347,8 +1241,6 @@ function Section:AddLabel(options: { [string]: any } | string)
 		end,
 	}
 end
-
---== Toggle ===================================================================
 
 function Section:AddToggle(options: { [string]: any })
 	local row, _, right = self:_Row(options.Title or "Toggle")
@@ -1384,8 +1276,6 @@ function Section:AddCheckbox(options: { [string]: any })
 	return self:AddToggle(options)
 end
 
---== Colorpicker ==============================================================
-
 function Section:AddColorpicker(options: { [string]: any })
 	local row, _, right = self:_Row(options.Title or "Colorpicker")
 	local flag = options.Flag
@@ -1399,13 +1289,8 @@ function Section:AddColorpicker(options: { [string]: any })
 		LayoutOrder = 2,
 		BorderSizePixel = 0,
 	})
-	-- deliberately NOT theme-bound: the swatch shows the picked colour, so a
-	-- later SetTheme must not overwrite it
 	swatch.BackgroundColor3 = options.Default or Callisto.Theme.Accent
 	Pill(swatch)
-	-- hover ring: accent-themed (the dump's hardcoded purple clashed with any
-	-- theme) and driven by GuiState, which unlike MouseEnter/MouseLeave cannot
-	-- miss the leave event and leave the ring stuck on
 	local swatchStroke = Add("UIStroke", {
 		Parent = swatch,
 		Transparency = 1,
@@ -1438,8 +1323,6 @@ function Section:AddColorpicker(options: { [string]: any })
 	return picker
 end
 
---== Keybind ==================================================================
-
 local KeybindBlacklist = {
 	[EKC.Unknown] = true,
 }
@@ -1452,7 +1335,6 @@ function Section:AddKeybind(options: { [string]: any })
 	local button = Text(left, {
 		ClassName = "TextButton",
 		LayoutOrder = 2,
-		-- the dump had Active = false (static mockup); it must be true to click
 		Active = true,
 		Selectable = false,
 		TextTruncate = ETT.SplitWord,
@@ -1482,8 +1364,6 @@ function Section:AddKeybind(options: { [string]: any })
 	Connect(UserInputService.InputBegan, function(input, processed)
 		if binding then
 			if input.UserInputType == UIT.Keyboard and not KeybindBlacklist[input.KeyCode] then
-				-- Backspace clears the bind. `x and nil or y` cannot express this
-				-- in Lua (nil is falsy), so it has to be a real branch.
 				if input.KeyCode == EKC.Backspace then
 					current = nil
 				else
@@ -1520,8 +1400,7 @@ function Section:AddKeybind(options: { [string]: any })
 	}
 end
 
---== Slider ===================================================================
-
+-- Slider (unchanged as requested)
 function Section:AddSlider(options: { [string]: any })
 	local minimum = options.Min or 0
 	local maximum = options.Max or 100
@@ -1602,8 +1481,6 @@ function Section:AddSlider(options: { [string]: any })
 		return MF(number * multiplier + 0.5) / multiplier
 	end
 
-	-- The fill's Size is the value readout — data, not decoration — so it is
-	-- set instantly, never tweened. Dragging updates it every frame anyway.
 	local function render()
 		local progress = (value - minimum) / (maximum - minimum)
 		fill.Size = UD2(progress, 0, 1, 0)
@@ -1644,7 +1521,6 @@ function Section:AddSlider(options: { [string]: any })
 		end
 	end)
 
-	-- hover feedback: stroke tint only
 	Hover(track, function(hovering)
 		Tween(trackStroke, Anim.Base, {
 			Color = hovering and Callisto.Theme.Accent or Callisto.Theme.Border,
@@ -1663,8 +1539,6 @@ function Section:AddSlider(options: { [string]: any })
 		end,
 	}
 end
-
---== Input ====================================================================
 
 function Section:AddInput(options: { [string]: any })
 	local container = Add("Frame", {
@@ -1740,8 +1614,6 @@ function Section:AddInput(options: { [string]: any })
 		end,
 	}
 end
-
---== Dropdown =================================================================
 
 function Section:AddDropdown(options: { [string]: any })
 	local values = options.Values or options.Options or {}
@@ -1825,8 +1697,6 @@ function Section:AddDropdown(options: { [string]: any })
 	})
 	Add("UISizeConstraint", { Parent = icon, MinSize = V2(10, 10), MaxSize = V2(10, 10) })
 
-	--== popup list (plain Frame; the surface gradient only tints the frame's
-	--== own background, so the option text stays untouched)
 	local externals = self.Window.Externals
 	local popup = PopupFrame(externals, "Dropdown")
 	Corner(popup, 5)
@@ -1880,10 +1750,6 @@ function Section:AddDropdown(options: { [string]: any })
 		end
 		open = shouldOpen
 
-		-- Size is decided before the popup appears and never animated. It is
-		-- computed from fixed entry metrics — TextBounds (and therefore
-		-- AbsoluteContentSize) are NOT computed for elements that have never
-		-- rendered, so measuring the hidden list would collapse the popup.
 		local count = #entries
 		local contentHeight = count * ENTRY_HEIGHT + math.max(count - 1, 0) * ENTRY_GAP
 		local height = math.min(contentHeight + 11, options.MaxHeight or 160)
@@ -1896,8 +1762,6 @@ function Section:AddDropdown(options: { [string]: any })
 	end
 
 	local function AddOption(value: string)
-		-- fixed height + full width instead of AutomaticSize: automatic sizing
-		-- needs TextBounds, which stay 0 until the element first renders
 		local entry = Text(inner, {
 			ClassName = "TextButton",
 			LayoutOrder = 1,
@@ -1942,7 +1806,6 @@ function Section:AddDropdown(options: { [string]: any })
 		AddOption(tostring(value))
 	end
 
-	-- prime the fader with the fully-built option list (see colorpicker note)
 	Fader.Out(popup, TI(0))
 
 	Connect(button.MouseButton1Click, function()
@@ -1978,8 +1841,6 @@ function Section:AddDropdown(options: { [string]: any })
 			render()
 		end,
 		Refresh = function(_, newValues: { string })
-			-- restore the shell to rest before rebuilding, so the re-prime
-			-- below captures true rest values rather than mid-fade ones
 			local hidden = Fader.State[popup] == "hidden"
 			if hidden then
 				Fader.In(popup, TI(0))
@@ -2006,16 +1867,6 @@ function Section:AddDropdown(options: { [string]: any })
 	}
 end
 
---== Switch (segmented button) ================================================
-
---[[
-	Section:AddSwitch({
-		Values = { "varation 1", "Disabled" },
-		Default = 1,
-		Compact = true,             -- SwitchButton2 (2px inset) vs SwitchButton (1px)
-		Callback = function(value, index) end,
-	})
-]]
 function Section:AddSwitch(options: { [string]: any })
 	local values = options.Values or {}
 	local index = options.Default or 1
@@ -2044,9 +1895,6 @@ function Section:AddSwitch(options: { [string]: any })
 
 	local buttons: { any } = {}
 
-	-- Active segment = accent background (the button itself) + accent stroke.
-	-- Inactive = the accent layer fades out, revealing the raised surface
-	-- behind. Pure crossfade — no segment ever moves or resizes.
 	local function render(animate: boolean?)
 		local info = animate == false and TI(0) or Anim.Base
 		for position, entry in next, buttons do
@@ -2059,7 +1907,6 @@ function Section:AddSwitch(options: { [string]: any })
 		end
 	end
 
-	-- ipairs, not next: LayoutOrder depends on a deterministic sequence
 	for position, value in ipairs(values) do
 		local disabled = typeof(value) == "table" and value.Disabled or false
 		local title = typeof(value) == "table" and value.Title or tostring(value)
@@ -2089,7 +1936,6 @@ function Section:AddSwitch(options: { [string]: any })
 			TextTransparency = disabled and 0.9 or 0.5,
 		})
 
-		-- inactive segments keep the raised surface gradient
 		local surface = Add("Frame", {
 			Parent = button,
 			BackgroundTransparency = 1,
@@ -2150,14 +1996,9 @@ end
 local Page = {}
 Page.__index = Page
 
---[[
-	Page:AddSection("Left", "Section #1")
-	Page:AddSection("Section #1")          -- side omitted, defaults to Left
-]]
 function Page:AddSection(side: string, title: string?)
 	local normalized = side and side:lower() or "left"
 
-	-- Allow the side argument to be skipped entirely.
 	if normalized ~= "left" and normalized ~= "right" then
 		title = side
 		normalized = "left"
@@ -2174,7 +2015,7 @@ function Page:AddSection(side: string, title: string?)
 	})
 	Bind(section, { BackgroundColor3 = "Background" })
 	Stroke(section, "Border", true)
-	Corner(section, 5)
+	Corner(section, 6) -- increased from 5
 	Shadow(section, 0.6)
 
 	local header = Add("Frame", {
@@ -2183,11 +2024,12 @@ function Page:AddSection(side: string, title: string?)
 		Size = UD2(1, 0, 0, 25),
 		BorderSizePixel = 0,
 	})
-	Bind(header, { BackgroundColor3 = "Foreground" })
+	-- Changed header background to ForegroundLight for a lighter look
+	Bind(header, { BackgroundColor3 = "ForegroundLight" })
 	Add("UICorner", {
 		Parent = header,
-		TopLeftRadius = UD(0, 5),
-		TopRightRadius = UD(0, 5),
+		TopLeftRadius = UD(0, 6),
+		TopRightRadius = UD(0, 6),
 		BottomRightRadius = UD(0, 0),
 		BottomLeftRadius = UD(0, 0),
 	})
@@ -2212,8 +2054,9 @@ function Page:AddSection(side: string, title: string?)
 		AutomaticSize = AT.Y,
 		BorderSizePixel = 0,
 	})
-	Padding(content, 10, 11, 11, 11)
-	List(content, { Padding = UD(0, 7) })
+	-- Reduced padding for a more compact look
+	Padding(content, 8, 8, 8, 8)
+	List(content, { Padding = UD(0, 6) }) -- slightly reduced gap
 
 	return setmetatable({
 		Instance = section,
@@ -2281,11 +2124,9 @@ function Window:AddPage(name: string)
 	Padding(right, 0, 0, 5, 0)
 	List(right, { Padding = UD(0, 10) })
 
-	--== tab button (PageButtonD inactive <-> PageButtonE active) ==============
 	local button = Add("TextButton", {
 		Parent = self.ButtonHolder,
 		FontFace = FN(FONT_ID, FW.Medium, FS.Normal),
-		-- the dump had Active = false (static mockup); tabs must be clickable
 		Active = true,
 		Text = "",
 		AutoButtonColor = false,
@@ -2297,7 +2138,6 @@ function Window:AddPage(name: string)
 		BorderSizePixel = 0,
 		LayoutOrder = #self.PageList + 1,
 	})
-	-- gradient carrier: white background, colours live in the gradient
 	button.BackgroundColor3 = WHITE
 	Corner(button, 5)
 	Padding(button, 0, 0, 5, 5)
@@ -2371,10 +2211,6 @@ function Window:SelectPage(page: any)
 		other.SetActive(other == page)
 	end
 
-	-- The outgoing page is captured and hidden instantly (no overlap frames);
-	-- the incoming page fades back to its captured rest values while settling
-	-- down from +8px. The first visit to a page has no capture yet, so it
-	-- simply appears and slides — every later visit gets the full fade.
 	if previous then
 		local frame = previous.Instance
 		Fader.Out(frame, TI(0))
@@ -2392,8 +2228,6 @@ function Window:SetTitle(title: string)
 	self.Title.Text = title
 end
 
--- Open/close: Fader cascade + a 12px slide. The window's size is NEVER
--- animated.
 function Window:Toggle(state: boolean?)
 	local open = state
 	if open == nil then
@@ -2415,7 +2249,6 @@ function Window:Toggle(state: boolean?)
 		Tween(canvas, Anim.Slow, { Position = home })
 		Fader.In(canvas, Anim.Slow)
 	else
-		-- capture wherever the user last dragged it, restore after the fade
 		local home: UDim2 = canvas.Position
 		self.HomePosition = home
 		Fader.Out(canvas, Anim.Base)
@@ -2429,14 +2262,12 @@ function Window:Toggle(state: boolean?)
 	end
 end
 
--- Removes this window only. Connections are library-wide, so they are left
--- alone here; use Callisto:Unload() to tear everything down.
 function Window:Destroy()
 	local index = TF(Callisto.Windows, self)
 	if index then
 		TR(Callisto.Windows, index)
 	end
-	Fader.Forget(self.Root) -- before Destroy, while ancestry is intact
+	Fader.Forget(self.Root)
 	self.Root:Destroy()
 end
 
@@ -2473,7 +2304,6 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 	Shadow(canvas, 0.65)
 	Corner(canvas)
 
-	--== header ===============================================================
 	local header = Add("Frame", {
 		Parent = canvas,
 		Name = "Header",
@@ -2526,7 +2356,6 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 		Padding = UD(0, 5),
 	})
 
-	--== body =================================================================
 	local pages = Add("Frame", {
 		Parent = canvas,
 		Name = "Pages",
@@ -2538,7 +2367,6 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 	})
 	Padding(pages, 1, 1)
 
-	--== footer ===============================================================
 	local footer = Add("Frame", {
 		Parent = canvas,
 		AnchorPoint = V2(0, 1),
@@ -2581,8 +2409,6 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 		Tween(resize, Anim.Fast, { ImageTransparency = hovering and 0 or 0.5 })
 	end)
 
-	--== externals (popups live above everything, outside the canvas group so
-	--== they are not clipped or faded with the window) ========================
 	local externals = Add("Frame", {
 		Parent = screenGui,
 		Name = "Externals",
@@ -2611,7 +2437,6 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 	MakeDraggable(header, canvas)
 	MakeResizable(resize, canvas, opts.MinSize or V2(420, 320))
 
-	-- open/close keybind
 	local toggleKey = opts.Keybind or EKC.RightShift
 	Connect(UserInputService.InputBegan, function(input, processed)
 		if processed then
@@ -2622,8 +2447,6 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 		end
 	end)
 
-	-- entrance: capture the freshly-built shell, park it transparent, then
-	-- fade + slide up into place; the size never animates
 	local home = canvas.Position
 	Fader.Out(canvas, TI(0))
 	canvas.Position = home + UD2(0, 0, 0, 12)
@@ -2634,7 +2457,6 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 	return window
 end
 
--- Full teardown: every window, every connection, every theme registration.
 function Callisto:Unload()
 	if ThemeTransition then
 		ThemeTransition:Disconnect()
