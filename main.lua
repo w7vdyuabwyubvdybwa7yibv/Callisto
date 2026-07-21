@@ -1,7 +1,11 @@
 --!strict
 --[[
-	Callisto — single-file UI library
-	Visual overhaul: matches the source library's look (toggles, keybinds, sections, titles).
+	Callisto — full‑featured UI library
+	- Tabs (sidebar)
+	- Sub‑tabs (pages) displayed horizontally
+	- Left & Right sections per page
+	- Controls: Toggle, Slider, Keybind, Colorpicker, etc.
+	Styling matches the source library (dark, compact, pill toggles).
 	Slider behaviour unchanged.
 ]]
 
@@ -71,7 +75,7 @@ Callisto.Windows = {} :: { any }
 Callisto.Connections = {} :: { RBXScriptConnection }
 
 --=============================================================================
--- Theme (exact colors from the source)
+-- Theme (exact colours from source)
 --=============================================================================
 
 local DefaultTheme = {
@@ -619,12 +623,12 @@ local function InsideBounds(mouse: Vector2, object: GuiObject): boolean
 end
 
 --=============================================================================
--- Sub-elements (redesigned toggle, checkbox, keybind, etc.)
+-- Sub-elements (redesigned toggle, checkbox, keybind)
 --=============================================================================
 
 local SubElement = {}
 
--- Redesigned Toggle: exact match to source (34x16, stroke, circle)
+-- Redesigned Toggle (34x16, pill, circle, accent on)
 function SubElement.Toggle(parent: Instance, default: boolean, callback: (boolean) -> ())
 	local state = default and true or false
 
@@ -705,7 +709,7 @@ function SubElement.Toggle(parent: Instance, default: boolean, callback: (boolea
 	}
 end
 
--- Checkbox (unchanged visually, but keep)
+-- Checkbox (unchanged)
 function SubElement.Checkbox(parent: Instance, default: boolean, callback: (boolean) -> ())
 	local state = default and true or false
 
@@ -786,7 +790,7 @@ function SubElement.Checkbox(parent: Instance, default: boolean, callback: (bool
 end
 
 --=============================================================================
--- Colorpicker popup (unchanged)
+-- Colorpicker (unchanged)
 --=============================================================================
 
 local function BuildColorpicker(holder: Instance, swatch: GuiButton, default: Color3, defaultAlpha: number, callback)
@@ -1087,7 +1091,7 @@ local function BuildColorpicker(holder: Instance, swatch: GuiButton, default: Co
 end
 
 --=============================================================================
--- Section (styling: header uses Foreground, bottom stroke)
+-- Section (used inside pages)
 --=============================================================================
 
 local Section = {}
@@ -1323,7 +1327,7 @@ local KeybindBlacklist = {
 	[EKC.Unknown] = true,
 }
 
--- Redesigned Keybind: compact frame with stroke, height 16, auto width
+-- Redesigned Keybind: compact frame, auto width, height 16
 function Section:AddKeybind(options: { [string]: any })
 	local _, left = self:_Row(options.Title or "Keybind")
 	local current: EnumItem? = options.Default
@@ -1410,7 +1414,7 @@ function Section:AddKeybind(options: { [string]: any })
 	}
 end
 
--- Slider (unchanged as requested)
+-- Slider (unchanged)
 function Section:AddSlider(options: { [string]: any })
 	local minimum = options.Min or 0
 	local maximum = options.Max or 100
@@ -2000,13 +2004,12 @@ function Section:AddSwitch(options: { [string]: any })
 end
 
 --=============================================================================
--- Page
+-- Page (contains left/right sections)
 --=============================================================================
 
 local Page = {}
 Page.__index = Page
 
--- Redesigned section: header uses Foreground, bottom stroke separator
 function Page:AddSection(side: string, title: string?)
 	local normalized = side and side:lower() or "left"
 	if normalized ~= "left" and normalized ~= "right" then
@@ -2033,7 +2036,7 @@ function Page:AddSection(side: string, title: string?)
 		Size = UD2(1, 0, 0, 25),
 		BorderSizePixel = 0,
 	})
-	Bind(header, { BackgroundColor3 = "Foreground" })  -- ElementBackground
+	Bind(header, { BackgroundColor3 = "Foreground" })
 	Add("UICorner", {
 		Parent = header,
 		TopLeftRadius = UD(0, 6),
@@ -2041,7 +2044,6 @@ function Page:AddSection(side: string, title: string?)
 		BottomRightRadius = UD(0, 0),
 		BottomLeftRadius = UD(0, 0),
 	})
-	-- bottom stroke as a separator
 	local sep = Add("Frame", {
 		Parent = header,
 		AnchorPoint = V2(0, 1),
@@ -2083,24 +2085,24 @@ function Page:AddSection(side: string, title: string?)
 end
 
 --=============================================================================
--- Window
+-- Tab (sidebar tab with multiple pages/sub‑tabs)
 --=============================================================================
 
-local Window = {}
-Window.__index = Window
+local Tab = {}
+Tab.__index = Tab
 
-function Window:AddPage(name: string)
-	local frame = Add("Frame", {
-		Parent = self.Pages,
+function Tab:AddPage(name: string)
+	-- Each tab contains a set of pages (sub‑tabs)
+	local pageFrame = Add("Frame", {
+		Parent = self.PageContainer,
 		BackgroundTransparency = 1,
-		Name = "PageFrame",
 		Size = UFS(1, 1),
 		Visible = false,
 		BorderSizePixel = 0,
 	})
 
 	local left = Add("ScrollingFrame", {
-		Parent = frame,
+		Parent = pageFrame,
 		MidImage = "rbxassetid://83323744952055",
 		TopImage = "rbxassetid://86255327167604",
 		BottomImage = "rbxassetid://79069740978089",
@@ -2119,7 +2121,7 @@ function Window:AddPage(name: string)
 	List(left, { Padding = UD(0, 10) })
 
 	local right = Add("ScrollingFrame", {
-		Parent = frame,
+		Parent = pageFrame,
 		Selectable = false,
 		AnchorPoint = V2(1, 0),
 		CanvasSize = UFS(0, 0),
@@ -2139,90 +2141,91 @@ function Window:AddPage(name: string)
 	Padding(right, 0, 0, 5, 0)
 	List(right, { Padding = UD(0, 10) })
 
-	local button = Add("TextButton", {
-		Parent = self.ButtonHolder,
+	-- Sub‑tab button (appears in the horizontal bar)
+	local subButton = Add("TextButton", {
+		Parent = self.SubTabHolder,
 		FontFace = FN(FONT_ID, FW.Medium, FS.Normal),
 		Active = true,
 		Text = "",
 		AutoButtonColor = false,
 		Selectable = false,
 		Size = UFS(0, 1),
-		Name = "PageButton",
+		Name = "SubTab",
 		BackgroundTransparency = 1,
 		AutomaticSize = AT.X,
 		BorderSizePixel = 0,
-		LayoutOrder = #self.PageList + 1,
+		LayoutOrder = #self.Pages + 1,
 	})
-	button.BackgroundColor3 = WHITE
-	Corner(button, 5)
-	Padding(button, 0, 0, 5, 5)
-	local buttonShadow = Shadow(button, 1, "Accent")
-	local buttonStroke = Stroke(button, "AccentLight", true)
-	buttonStroke.Transparency = 1
-	local buttonGradient = Add("UIGradient", { Parent = button, Rotation = 90 })
-	BindGradient(buttonGradient, { { 0, "Accent" }, { 1, "AccentDark" } })
+	subButton.BackgroundColor3 = WHITE
+	Corner(subButton, 4)
+	Padding(subButton, 0, 0, 6, 6)
+	local subStroke = Stroke(subButton, "AccentLight", true)
+	subStroke.Transparency = 1
+	local subGradient = Add("UIGradient", { Parent = subButton, Rotation = 90 })
+	BindGradient(subGradient, { { 0, "Accent" }, { 1, "AccentDark" } })
+	local subShadow = Shadow(subButton, 1, "Accent")
 
-	local label = Text(button, {
+	local subLabel = Text(subButton, {
 		FontFace = FN(FONT_ID, FW.Medium, FS.Normal),
 		Text = name,
 		TextTransparency = 0.5,
 		BackgroundTransparency = 1,
 		Size = UFS(1, 1),
 		AutomaticSize = AT.XY,
-		TextSize = 15,
+		TextSize = 14,
 	})
 
-	local page: any = setmetatable({
+	local pageObj = setmetatable({
 		Name = name,
-		Instance = frame,
+		Instance = pageFrame,
 		Left = left,
 		Right = right,
-		Button = button,
-		Window = self,
+		SubButton = subButton,
+		Tab = self,
 	}, Page)
 
+	-- Activation function for sub‑tab
 	local function setActive(active: boolean, animate: boolean?)
 		local info = animate == false and TI(0) or Anim.Base
-		Tween(button, info, { BackgroundTransparency = active and 0 or 1 })
-		Tween(buttonStroke, info, { Transparency = active and 0 or 1 })
-		Tween(label, info, { TextTransparency = active and 0 or 0.5 })
-		if buttonShadow then
-			Tween(buttonShadow, info, { Transparency = active and 0.65 or 1 })
+		Tween(subButton, info, { BackgroundTransparency = active and 0 or 1 })
+		Tween(subStroke, info, { Transparency = active and 0 or 1 })
+		Tween(subLabel, info, { TextTransparency = active and 0 or 0.5 })
+		if subShadow then
+			Tween(subShadow, info, { Transparency = active and 0.65 or 1 })
 		end
 	end
+	pageObj.SetActive = setActive
 
-	page.SetActive = setActive
-
-	Connect(button.MouseButton1Click, function()
-		self:SelectPage(page)
+	Connect(subButton.MouseButton1Click, function()
+		self:SelectPage(pageObj)
 	end)
 
-	Hover(button, function(hovering)
-		if self.CurrentPage == page then
+	Hover(subButton, function(hovering)
+		if self.CurrentPage == pageObj then
 			return
 		end
-		Tween(label, Anim.Fast, { TextTransparency = hovering and 0.2 or 0.5 })
+		Tween(subLabel, Anim.Fast, { TextTransparency = hovering and 0.2 or 0.5 })
 	end)
 
 	setActive(false, false)
-	TIS(self.PageList, page)
+	TIS(self.Pages, pageObj)
 
 	if not self.CurrentPage then
-		self:SelectPage(page)
+		self:SelectPage(pageObj)
 	end
 
-	return page
+	return pageObj
 end
 
-function Window:SelectPage(page: any)
+function Tab:SelectPage(page: any)
 	if self.CurrentPage == page then
 		return
 	end
 
-	local previous: any = self.CurrentPage
+	local previous = self.CurrentPage
 	self.CurrentPage = page
 
-	for _, other in next, self.PageList do
+	for _, other in next, self.Pages do
 		other.SetActive(other == page)
 	end
 
@@ -2237,6 +2240,174 @@ function Window:SelectPage(page: any)
 	page.Instance.Visible = true
 	Fader.In(page.Instance, Anim.Slow)
 	Tween(page.Instance, Anim.Slow, { Position = UFO(0, 0) })
+end
+
+--=============================================================================
+-- Window (top‑level container)
+--=============================================================================
+
+local Window = {}
+Window.__index = Window
+
+function Window:AddTab(name: string, icon: string?)
+	icon = icon or "rbxassetid://108020878442937"
+
+	-- Sidebar button
+	local button = Add("TextButton", {
+		Parent = self.TabHolder,
+		FontFace = FN(FONT_ID, FW.Medium, FS.Normal),
+		Text = "",
+		AutoButtonColor = false,
+		Active = true,
+		Selectable = false,
+		Size = UFS(1, 0),
+		Height = UD(0, 40),
+		Name = "TabButton",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		LayoutOrder = #self.Tabs + 1,
+	})
+	button.BackgroundColor3 = WHITE
+	Corner(button, 6)
+	Padding(button, 0, 0, 10, 10)
+
+	local iconLabel = Add("ImageLabel", {
+		Parent = button,
+		ImageColor3 = Callisto.Theme.Unselected or RGB(170,170,170),
+		Image = icon,
+		BackgroundTransparency = 1,
+		Size = UFO(21, 21),
+		AnchorPoint = V2(0, 0.5),
+		Position = UD2(0, 13, 0.5, 0),
+		BorderSizePixel = 0,
+	})
+	Bind(iconLabel, { ImageColor3 = "Unselected" })
+	-- We'll use TextColor3 for the label
+	local label = Text(button, {
+		FontFace = FN(FONT_ID, FW.Medium, FS.Normal),
+		Text = name,
+		TextTransparency = 0.5,
+		Size = UFS(1, 1),
+		Position = UFO(40, 0),
+		TextXAlignment = TXA.Left,
+		AutomaticSize = AT.XY,
+		TextSize = 15,
+	})
+	Bind(label, { TextColor3 = "Unselected" })
+
+	-- Glow / active indicator (like in source)
+	local glow = Add("Frame", {
+		Parent = button,
+		BackgroundTransparency = 1,
+		Size = UD2(0, 20, 1, 0),
+		BorderSizePixel = 0,
+	})
+	Bind(glow, { BackgroundColor3 = "Accent" })
+	Corner(glow, 3)
+	Add("ImageLabel", {
+		Parent = glow,
+		ImageColor3 = Callisto.Theme.Accent,
+		ImageTransparency = 1,
+		ScaleType = SCL.Slice,
+		Size = UD2(1, 20, 1, 20),
+		Position = UFO(-20, -10),
+		Image = "rbxassetid://18245826428",
+		SliceCenter = Rect.new(20,20,80,80),
+		BackgroundTransparency = 1,
+	})
+
+	-- Container for this tab's pages (sub‑tabs)
+	local pageContainer = Add("Frame", {
+		Parent = self.PagesContainer,
+		BackgroundTransparency = 1,
+		Size = UFS(1, 1),
+		Visible = false,
+		BorderSizePixel = 0,
+	})
+
+	-- Sub‑tab holder (horizontal bar) inside this tab's area
+	local subTabHolder = Add("Frame", {
+		Parent = self.SubTabArea,
+		BackgroundTransparency = 1,
+		Size = UD2(1, 0, 0, 30),
+		Visible = false,
+		BorderSizePixel = 0,
+	})
+	List(subTabHolder, {
+		FillDirection = FD.Horizontal,
+		Padding = UD(0, 5),
+		VerticalAlignment = VFA.Center,
+	})
+	Padding(subTabHolder, 0, 0, 10, 10)
+
+	local tabObj = setmetatable({
+		Name = name,
+		Button = button,
+		Glow = glow,
+		Icon = iconLabel,
+		Label = label,
+		PageContainer = pageContainer,
+		SubTabHolder = subTabHolder,
+		Pages = {},
+		CurrentPage = nil,
+		Window = self,
+	}, Tab)
+
+	-- Activation function for the tab itself
+	local function setTabActive(active: boolean, animate: boolean?)
+		local info = animate == false and TI(0) or Anim.Base
+		Tween(button, info, { BackgroundTransparency = active and 0 or 1 })
+		Tween(glow, info, { BackgroundTransparency = active and 0 or 1 })
+		Tween(label, info, { TextTransparency = active and 0 or 0.5 })
+		-- Also update icon color? We'll keep it simple.
+		if active then
+			label.TextColor3 = Callisto.Theme.Accent
+			iconLabel.ImageColor3 = Callisto.Theme.Accent
+		else
+			label.TextColor3 = Callisto.Theme.Unselected or RGB(170,170,170)
+			iconLabel.ImageColor3 = Callisto.Theme.Unselected or RGB(170,170,170)
+		end
+	end
+	tabObj.SetActive = setTabActive
+
+	Connect(button.MouseButton1Click, function()
+		self:SelectTab(tabObj)
+	end)
+
+	setTabActive(false, false)
+	TIS(self.Tabs, tabObj)
+
+	if not self.CurrentTab then
+		self:SelectTab(tabObj)
+	end
+
+	return tabObj
+end
+
+function Window:SelectTab(tab: any)
+	if self.CurrentTab == tab then
+		return
+	end
+
+	local previous = self.CurrentTab
+	self.CurrentTab = tab
+
+	for _, other in next, self.Tabs do
+		other.SetActive(other == tab)
+	end
+
+	if previous then
+		previous.PageContainer.Visible = false
+		previous.SubTabHolder.Visible = false
+	end
+
+	tab.PageContainer.Visible = true
+	tab.SubTabHolder.Visible = true
+
+	-- Ensure the first page is selected if none
+	if not tab.CurrentPage and #tab.Pages > 0 then
+		tab:SelectPage(tab.Pages[1])
+	end
 end
 
 function Window:SetTitle(title: string)
@@ -2298,7 +2469,7 @@ end
 
 function Callisto:CreateWindow(options: { [string]: any }?)
 	local opts: { [string]: any } = options or {}
-	local size = opts.Size or V2(591, 480)
+	local size = opts.Size or V2(700, 500)  -- slightly wider to fit sidebar
 
 	local root = Add("Folder", { Parent = GetParentGui(), Name = "Callisto" })
 
@@ -2325,7 +2496,7 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 	Shadow(canvas, 0.65)
 	Corner(canvas, 10)
 
-	-- Header with Title and SubTitle (two lines)
+	-- Header (Title + SubTitle)
 	local header = Add("Frame", {
 		Parent = canvas,
 		Name = "Header",
@@ -2339,14 +2510,13 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 	local titleFrame = Add("Frame", {
 		Parent = header,
 		BackgroundTransparency = 1,
-		Size = UFS(1, 1),
+		Size = UFS(0.5, 1),  -- left half for title
 		BorderSizePixel = 0,
 	})
 	Padding(titleFrame, 5, 5, 10, 10)
 	List(titleFrame, {
 		VerticalAlignment = VFA.Center,
 		FillDirection = FD.Vertical,
-		Padding = UD(0, 0),
 	})
 
 	local title = Text(titleFrame, {
@@ -2365,36 +2535,56 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 		TextXAlignment = TXA.Left,
 	})
 
-	-- Tabs (Page buttons) on the right side of header
-	local buttonHolder = Add("Frame", {
-		Parent = header,
-		AnchorPoint = V2(1, 0.5),
-		Position = UFS(1, 0.5),
-		BackgroundTransparency = 1,
-		Size = UFS(0, 1),
-		AutomaticSize = AT.X,
-		BorderSizePixel = 0,
-	})
-	List(buttonHolder, {
-		VerticalAlignment = VFA.Center,
-		FillDirection = FD.Horizontal,
-		HorizontalAlignment = HFA.Right,
-		Padding = UD(0, 5),
-	})
-
-	-- Body (pages)
-	local pages = Add("Frame", {
+	-- Main layout: sidebar + content
+	local mainFrame = Add("Frame", {
 		Parent = canvas,
-		Name = "Pages",
 		BackgroundTransparency = 1,
-		Position = UFO(10, 55),
-		Size = UD2(1, -20, 1, -85),
-		ClipsDescendants = true,
+		Position = UFO(0, 45),
+		Size = UD2(1, 0, 1, -45),
 		BorderSizePixel = 0,
 	})
-	Padding(pages, 1, 1)
+	List(mainFrame, { FillDirection = FD.Horizontal })
 
-	-- Footer
+	-- Sidebar (tabs)
+	local sidebar = Add("ScrollingFrame", {
+		Parent = mainFrame,
+		BackgroundTransparency = 0,
+		Size = UD2(0, 178, 1, 0),
+		BorderSizePixel = 0,
+		ScrollBarThickness = 0,
+		CanvasSize = UFS(0, 0),
+		AutomaticCanvasSize = AT.Y,
+	})
+	Bind(sidebar, { BackgroundColor3 = "Background" })
+	Padding(sidebar, 10, 10, 10, 10)
+	List(sidebar, { Padding = UD(0, 8) })
+
+	-- Content area (right of sidebar)
+	local contentArea = Add("Frame", {
+		Parent = mainFrame,
+		BackgroundTransparency = 1,
+		Size = UD2(1, -178, 1, 0),
+		BorderSizePixel = 0,
+	})
+	List(contentArea, { FillDirection = FD.Vertical })
+
+	-- Sub‑tab bar (horizontal area for page buttons)
+	local subTabArea = Add("Frame", {
+		Parent = contentArea,
+		BackgroundTransparency = 1,
+		Size = UD2(1, 0, 0, 30),
+		BorderSizePixel = 0,
+	})
+	-- Pages container (holds the actual page frames)
+	local pagesContainer = Add("Frame", {
+		Parent = contentArea,
+		BackgroundTransparency = 1,
+		Size = UD2(1, 0, 1, -30),
+		BorderSizePixel = 0,
+	})
+	Padding(pagesContainer, 5, 5, 10, 10)
+
+	-- Footer (unchanged)
 	local footer = Add("Frame", {
 		Parent = canvas,
 		AnchorPoint = V2(0, 1),
@@ -2449,12 +2639,14 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 		Header = header,
 		Title = title,
 		SubTitle = subtitle,
-		ButtonHolder = buttonHolder,
-		Pages = pages,
+		Sidebar = sidebar,
+		TabHolder = sidebar,  -- the scrolling frame is the tab holder
+		SubTabArea = subTabArea,
+		PagesContainer = pagesContainer,
 		Footer = footer,
 		Externals = externals,
-		PageList = {},
-		CurrentPage = nil,
+		Tabs = {},
+		CurrentTab = nil,
 		Visible = true,
 		HomePosition = nil,
 	}, Window)
@@ -2483,7 +2675,7 @@ function Callisto:CreateWindow(options: { [string]: any }?)
 end
 
 --=============================================================================
--- Teardown
+-- Unload
 --=============================================================================
 
 function Callisto:Unload()
