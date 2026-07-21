@@ -1,7 +1,7 @@
 --!strict
 --[[
 	Callisto — single-file UI library
-	(Modified styling: darker theme, lighter section headers, compact padding)
+	Refined styling: dark theme, compact spacing, pill-style keybinds.
 ]]
 
 local Players = game:GetService("Players")
@@ -70,17 +70,17 @@ Callisto.Windows = {} :: { any }
 Callisto.Connections = {} :: { RBXScriptConnection }
 
 --=============================================================================
--- Theme (updated colours)
+-- Theme (updated to match the mockup/source)
 --=============================================================================
 
 local DefaultTheme = {
-	Background = RGB(20, 22, 24),
-	Foreground = RGB(30, 33, 35),
-	ForegroundLight = RGB(40, 43, 45),
-	Border = RGB(48, 51, 53),
-	Accent = RGB(0, 140, 255),
-	AccentLight = RGB(77, 180, 255),
-	AccentDark = RGB(0, 100, 200),
+	Background = RGB(12, 12, 14),
+	Foreground = RGB(20, 20, 22),        -- ElementBackground
+	ForegroundLight = RGB(23, 24, 27),   -- Inline
+	Border = RGB(23, 24, 27),            -- Inline
+	Accent = RGB(255, 182, 193),         -- soft pink
+	AccentLight = RGB(255, 200, 210),
+	AccentDark = RGB(200, 130, 145),
 	Text = RGB(255, 255, 255),
 }
 
@@ -111,8 +111,6 @@ local function BindGradient(gradient: UIGradient, stops: { { any } })
 	gradient.Color = CS(keypoints)
 end
 
--- Paints every registered property/gradient at `alpha` between the previous
--- theme snapshot and the current one.
 local function PaintTheme(alpha: number, previous: { [string]: Color3 })
 	for instance, map in next, ColorRegistry do
 		if not instance.Parent then
@@ -172,7 +170,7 @@ function Callisto:SetTheme(theme: { [string]: Color3 }, animate: boolean?)
 	ThemeTransition = RunService.RenderStepped:Connect(function(dt)
 		elapsed += dt
 		local progress = MC(elapsed / 0.25, 0, 1)
-		PaintTheme(1 - (1 - progress) ^ 3, previous) -- cubic ease-out
+		PaintTheme(1 - (1 - progress) ^ 3, previous)
 		if progress >= 1 and ThemeTransition then
 			ThemeTransition:Disconnect()
 			ThemeTransition = nil
@@ -255,7 +253,7 @@ local function Press(button: GuiButton)
 end
 
 --=============================================================================
--- Fader — whole-tree fades without CanvasGroups
+-- Fader
 --=============================================================================
 
 local Fader = {}
@@ -1091,7 +1089,7 @@ local function BuildColorpicker(holder: Instance, swatch: GuiButton, default: Co
 end
 
 --=============================================================================
--- Section (modified styling)
+-- Section (refined styling)
 --=============================================================================
 
 local Section = {}
@@ -1327,37 +1325,52 @@ local KeybindBlacklist = {
 	[EKC.Unknown] = true,
 }
 
+-- Redesigned Keybind: now appears as a pill-shaped button with background and border
 function Section:AddKeybind(options: { [string]: any })
 	local _, left = self:_Row(options.Title or "Keybind")
 	local current: EnumItem? = options.Default
 	local binding = false
 
-	local button = Text(left, {
-		ClassName = "TextButton",
+	-- Container frame with rounded corners and border
+	local container = Add("Frame", {
+		Parent = left,
 		LayoutOrder = 2,
-		Active = true,
-		Selectable = false,
-		TextTruncate = ETT.SplitWord,
-		Name = "Keybind",
+		BackgroundTransparency = 0,
+		Size = UFO(70, 22), -- fixed width, but will be automatic? We'll use AutomaticSize maybe.
+		BorderSizePixel = 0,
+		BackgroundColor3 = Callisto.Theme.Foreground,
+	})
+	Bind(container, { BackgroundColor3 = "Foreground" })
+	Corner(container, 4)
+	Stroke(container, "Border", true)
+
+	local label = Text(container, {
+		ClassName = "TextButton",
 		Text = current and current.Name:upper() or "NONE",
 		TextTransparency = 0.5,
+		TextSize = 13,
 		AutomaticSize = AT.XY,
 		AutoButtonColor = false,
+		Active = true,
+		Selectable = false,
+		Size = UFS(1, 1),
+		TextXAlignment = TXA.Center,
 	})
+	Padding(label, 2, 2, 4, 4)
 
 	local function render()
-		button.Text = binding and "..." or (current and current.Name:upper() or "NONE")
-		Tween(button, Anim.Fast, { TextTransparency = binding and 0 or 0.5 })
+		label.Text = binding and "..." or (current and current.Name:upper() or "NONE")
+		Tween(label, Anim.Fast, { TextTransparency = binding and 0 or 0.5 })
 	end
 
-	Connect(button.MouseButton1Click, function()
+	Connect(label.MouseButton1Click, function()
 		binding = true
 		render()
 	end)
 
-	Hover(button, function(hovering)
+	Hover(label, function(hovering)
 		if not binding then
-			Tween(button, Anim.Fast, { TextTransparency = hovering and 0.2 or 0.5 })
+			Tween(label, Anim.Fast, { TextTransparency = hovering and 0.2 or 0.5 })
 		end
 	end)
 
@@ -1389,7 +1402,7 @@ function Section:AddKeybind(options: { [string]: any })
 	render()
 
 	return {
-		Instance = button,
+		Instance = container,
 		Get = function()
 			return current
 		end,
@@ -1400,7 +1413,7 @@ function Section:AddKeybind(options: { [string]: any })
 	}
 end
 
--- Slider (unchanged as requested)
+-- Slider (visual tweaks: slightly smaller track and knob, otherwise unchanged)
 function Section:AddSlider(options: { [string]: any })
 	local minimum = options.Min or 0
 	local maximum = options.Max or 100
@@ -1459,7 +1472,7 @@ function Section:AddSlider(options: { [string]: any })
 		Text = "",
 		AutoButtonColor = false,
 		Name = "Button",
-		Size = UD2(1, 0, 0, 16),
+		Size = UD2(1, 0, 0, 14), -- slightly shorter track
 		BorderSizePixel = 0,
 	})
 	Corner(track, 5)
@@ -2015,7 +2028,7 @@ function Page:AddSection(side: string, title: string?)
 	})
 	Bind(section, { BackgroundColor3 = "Background" })
 	Stroke(section, "Border", true)
-	Corner(section, 6) -- increased from 5
+	Corner(section, 6)
 	Shadow(section, 0.6)
 
 	local header = Add("Frame", {
@@ -2024,8 +2037,8 @@ function Page:AddSection(side: string, title: string?)
 		Size = UD2(1, 0, 0, 25),
 		BorderSizePixel = 0,
 	})
-	-- Changed header background to ForegroundLight for a lighter look
-	Bind(header, { BackgroundColor3 = "ForegroundLight" })
+	-- Use Foreground (ElementBackground) for header
+	Bind(header, { BackgroundColor3 = "Foreground" })
 	Add("UICorner", {
 		Parent = header,
 		TopLeftRadius = UD(0, 6),
@@ -2033,7 +2046,9 @@ function Page:AddSection(side: string, title: string?)
 		BottomRightRadius = UD(0, 0),
 		BottomLeftRadius = UD(0, 0),
 	})
-	Stroke(header, "Border", true)
+	-- Add a thin bottom stroke as a separator
+	local headerStroke = Stroke(header, "Border", false)
+	headerStroke.Thickness = 1
 
 	Text(header, {
 		Name = "Title",
@@ -2054,9 +2069,8 @@ function Page:AddSection(side: string, title: string?)
 		AutomaticSize = AT.Y,
 		BorderSizePixel = 0,
 	})
-	-- Reduced padding for a more compact look
-	Padding(content, 8, 8, 8, 8)
-	List(content, { Padding = UD(0, 6) }) -- slightly reduced gap
+	Padding(content, 6, 6, 10, 10) -- compact padding
+	List(content, { Padding = UD(0, 6) })
 
 	return setmetatable({
 		Instance = section,
@@ -2068,7 +2082,7 @@ function Page:AddSection(side: string, title: string?)
 end
 
 --=============================================================================
--- Window
+-- Window (unchanged except for theme application)
 --=============================================================================
 
 local Window = {}
